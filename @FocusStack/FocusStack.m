@@ -293,7 +293,11 @@ classdef FocusStack < handle
       
       % set.vtStimulusEndTimes - SETTER for 'vtStimulusEndTimes'
       function set.vtStimulusEndTimes(oStack, vtStimulusEndTimes)
-         if (~isnumeric(vtStimulusEndTimes) || (numel(vtStimulusEndTimes) ~= oStack.nNumStimuli) && ~isempty(vtStimulusEndTimes)) %#ok<MCSUP>
+         cvnSequenceIDs = oStack.cvnSequenceIDs; %#ok<MCSUP,PROP>
+         vnStimOrder = vertcat(cvnSequenceIDs{:}); %#ok<PROP>
+         nNumPresentations = numel(vnStimOrder);
+
+         if (~isnumeric(vtStimulusEndTimes) || (numel(vtStimulusEndTimes) ~= nNumPresentations) && ~isempty(vtStimulusEndTimes)) %#ok<MCSUP>
             error('FocusStack:InvalidArgument', ...
                '*** FocusStack/set.vtStimulusEndTimes: ''vtStimulusEndTimes'' must have [%d] elements for this stack.', ...
                oStack.nNumStimuli); %#ok<MCSUP>
