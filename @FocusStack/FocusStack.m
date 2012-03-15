@@ -480,9 +480,7 @@ function [vtStimulusStartTimes, vtStimulusEndTimes] = calc_stim_start_end_times(
    cvnSequenceIDs = oStack.cvnSequenceIDs;
    vnStimOrder = vertcat(cvnSequenceIDs{:});
    nNumPresentations = numel(vnStimOrder);
-   nFramesPerBlock = size(oStack, 3) / numel(oStack.cstrFilenames);
-   
-   tBlockDuration = (nFramesPerBlock * oStack.tFrameDuration);
+   vtBlockDuration = oStack.vnNumFrames .* oStack.tFrameDuration;
    
    vtStimulusDurations = oStack.vtStimulusDurations; %#ok<PROP>
    nSkipIndex = numel(vtStimulusDurations)+1; %#ok<PROP>
@@ -492,11 +490,13 @@ function [vtStimulusStartTimes, vtStimulusEndTimes] = calc_stim_start_end_times(
    vtStimulusStartTimes = [0; reshape(vtStimulusDurations(vnStimOrder), [], 1)]; %#ok<PROP>
    
    % - Replace NaNs with block skip durations
+   nBlockID = 1;
    while (any(isnan(vtStimulusStartTimes)))
       nSkipPresentation = find(isnan(vtStimulusStartTimes), 1, 'first');
       tCumulativeTime = sum(vtStimulusStartTimes(1:nSkipPresentation-1));
-      tTimeLeftInBlock = tBlockDuration - mod(tCumulativeTime, tBlockDuration);
+      tTimeLeftInBlock = vtBlockDuration(nBlockID) - mod(tCumulativeTime, vtBlockDuration(nBlockID));
       vtStimulusStartTimes(nSkipPresentation) = tTimeLeftInBlock;
+      nBlockID = nBlockID + 1;
    end
    
    % - Compute start and end times

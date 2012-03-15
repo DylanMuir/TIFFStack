@@ -90,10 +90,16 @@ vtGlobalTime = (vnFrameIndices-1) * oStack.tFrameDuration;
 % -- Work out which block(s) we're in, which frame in which block
 
 nNumBlocks = numel(oStack.cstrFilenames);
-nBlockLength = nNumFrames / nNumBlocks;
+% nBlockLength = nNumFrames / nNumBlocks;
+vnBlockFrameIndices = vnFrameIndices;
 
-vnBlockIndex = ceil(vnFrameIndices / nBlockLength);
-vnFrameInBlock = mod(vnFrameIndices-1, nBlockLength)+1;
+for (nBlock = 1:nNumBlocks)
+   vbInBlock = vnFrameIndices <= sum(oStack.vnNumFrames(1:nBlock));
+   vnBlockIndex(vbInBlock) = nBlock; %#ok<AGROW>
+   vnFrameInBlock(vbInBlock) = mod(vnFrameIndices(vbInBlock)-1, oStack.vnNumFrames(nBlock))+1; %#ok<AGROW>
+   vnBlockFrameIndices(vbInBlock) = nan;
+end
+
 vtTimeInBlock = (vnFrameInBlock-1) * oStack.tFrameDuration;
 
 
