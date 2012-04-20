@@ -4,7 +4,7 @@ function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
 
 % ExtractRegionResponses - FUNCTION Extract responses from identified regions of interest
 %
-% Usage: [vfBlankMeans, vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
+% Usage: [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
 %         tfTrialResponses, tnFramesInSample, cfTrialTraces] = ...
 %           ExtractRegionResponses(fsStack, sRegions, nBlankStimID, <, fhExtractionFunction>)
 %
@@ -37,12 +37,11 @@ function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
 % If 'fhExtractionFunction' is not supplied, the default will be to extract the
 % time and space average of channel 1.
 %
-% 'vfBlankMeans' will be a vector [Rx1], where 'R' is the number of ROIs.  Each
-% element contains the space-time average of the blank pixels defined for each
-% ROI.  'vfBlankStds' has the same conventions, with each element containing the
-% blank standard deviation (corrected for the number of pixels in each ROI) PER
-% FRAME for a given ROI.  This value must be further corrected to compare with
-% averages over several frames (ie divide by sqrt(nNumFrames)).
+% 'vfBlankStds' will be a vector [Rx1], where 'R' is the number of ROIs.  Each
+% element contains the blank standard deviation (corrected for the number of
+% pixels in each ROI) PER FRAME for a given ROI.  This value must be further
+% corrected to compare with averages over several frames (ie divide by
+% sqrt(nNumFrames)).
 %
 % 'mfStimMeanResponses' will be a matrix [RxS], where 'R' is the number of ROIs
 % and 'S' is the number of stimuli.  Each element in 'mfStimResponses' is the

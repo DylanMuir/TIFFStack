@@ -143,7 +143,7 @@ fsData.BlankNormalisation(strNormalisation);
 % - Restore warnings
 warning(wOld);
 
-% return;
+return;
 
 %% -- 
 
