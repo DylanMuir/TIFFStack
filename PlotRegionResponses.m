@@ -130,12 +130,16 @@ end
 
 vhFigures = [];
 
-if (exist('nLimitNumberOfCells', 'var') && ~isempty(nLimitNumberOfCells))
-   nNumRegions = min(nNumRegions, nLimitNumberOfCells);
+if (exist('nLimitNumberOfCells', 'var') && ~isempty(nLimitNumberOfCells) && isscalar(nLimitNumberOfCells))
+   vnPlotRegions = 1:min(nNumRegions, nLimitNumberOfCells);
+elseif ((numel(nLimitNumberOfCells) == 2) && (nLimitNumberOfCells(1) == nLimitNumberOfCells(2)))
+   vnPlotRegions = nLimitNumberOfCells(1);
+else
+   vnPlotRegions = nLimitNumberOfCells;
 end
 
 % - Loop over regions
-for (nRegion = 1:nNumRegions)
+for (nRegion = 1:numel(vnPlotRegions))
    if (mod(nRegion-1, DEF_nNumResponsesPerFigure) == 0)
       vhFigures(end+1) = figure; %#ok<AGROW>
       set(gcf, 'Color', 'w');
@@ -145,8 +149,8 @@ for (nRegion = 1:nNumRegions)
    subplot(DEF_nNumResponsesPerFigure, 1, mod(nRegion-1, DEF_nNumResponsesPerFigure)+1);
    
    % - Determine plot limits
-   fYMin = min(mfRegionResponses(nRegion, :));
-   fYMax = max(mfRegionResponses(nRegion, :));
+   fYMin = min(mfRegionResponses(vnPlotRegions(nRegion), :));
+   fYMax = max(mfRegionResponses(vnPlotRegions(nRegion), :));
    vfYLims = [fYMin fYMax];
 
    % - Loop over stimulus segments
@@ -174,7 +178,7 @@ for (nRegion = 1:nNumRegions)
       for (nBlock = 1:nNumBlocks)
          % - Find frames corresponding to this stimulus ID in this block
          vbStimBlockFrames = (vnStimulusSeqID == nStim) & (vnBlockIndex == nBlock);
-         vfThisTrialTrace = mfRegionResponses(nRegion, vbStimBlockFrames);
+         vfThisTrialTrace = mfRegionResponses(vnPlotRegions(nRegion), vbStimBlockFrames);
          
          % - Find times to plot this response trace on
          vtThisPresTimes = vtStimulusBlockStartTimes(nStim) + vtTimeInStimPresentation(vbStimBlockFrames);
@@ -236,7 +240,7 @@ for (nRegion = 1:nNumRegions)
 %    axis tight;
    box on;
    
-   if (nRegion ~= sRegions.NumObjects) && (mod(nRegion-1, DEF_nNumResponsesPerFigure) ~= (DEF_nNumResponsesPerFigure-1))
+   if (vnPlotRegions(nRegion) ~= sRegions.NumObjects) && (mod(nRegion-1, DEF_nNumResponsesPerFigure) ~= (DEF_nNumResponsesPerFigure-1))
       set(gca, 'XTick', []);
    end
    
