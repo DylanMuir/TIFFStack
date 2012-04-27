@@ -72,7 +72,8 @@ if (ischar(varargin{1}))
          load(varargin{1}, 'fsStack', 'vnNumPixels', 'fPixelOverlap', ...
             'fPixelSizeDeg', 'vfScreenSizeDeg', 'vfBlankStds', 'mfStimMeanResponses', ...
             'mfStimStds', 'mfRegionTraces', 'tfTrialResponses', 'tnTrialSampleSizes', ...
-            'sRegionsPlusNP', 'tBlankStimTime');
+            'sRegionsPlusNP', 'tBlankStimTime', 'mfStimZScores', 'tfBlankStdsCorr', ...
+            'tfStimZScoresTrials');
          
       catch mErr
          me = MException('RFEXPLORER:LOADERROR', '*** RF_explorer: Could not load analysis data from file');
@@ -90,7 +91,8 @@ else
    
    [fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
       vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
-      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, tBlankStimTime] = varargin{:};
+      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, tBlankStimTime, ...
+      mfStimZScores, tfBlankStdsCorr, tfStimZScoresTrials] = varargin{:};
 end
 
 % - Assign data to GUIDATA
@@ -107,6 +109,9 @@ handles.tfTrialResponses = tfTrialResponses;
 handles.tnTrialSampleSizes = tnTrialSampleSizes;
 handles.sRegionsPlusNP = sRegionsPlusNP;
 handles.tBlankStimTime = tBlankStimTime;
+handles.mfStimZScores = mfStimZScores;
+handles.tfBlankStdsCorr = tfBlankStdsCorr;
+handles.tfStimZScoresTrials = tfStimZScoresTrials;
 guidata(hObject, handles);
 
 
@@ -202,6 +207,12 @@ cla(handles.axROIResponse);
 vtStimDurations = handles.fsStack.vtStimulusDurations;
 vtStimulusBlockStartTimes = cumsum([0; vtStimDurations]);
 
+if (~isempty(handles.mfStimZScores))
+   bUsedFF = true;
+else
+   bUsedFF = false;
+end
+
 for (nStim = 1:size(handles.mfStimMeanResponses, 2))
    vfAvgStimTrace = [];
    vnNorm = [];
@@ -218,7 +229,11 @@ for (nStim = 1:size(handles.mfStimMeanResponses, 2))
       end
       
       % - Plot this trial trace
-      plot(handles.axROIResponse, vtThisPresTimes, vfThisTrialTrace, 'Color', 0.25 * [1 1 1], 'LineWidth', 2);
+      if (bUsedFF)
+         plot(handles.axROIResponse, vtThisPresTimes, vfThisTrialTrace * 100, 'Color', 0.25 * [1 1 1], 'LineWidth', 2);
+      else
+         plot(handles.axROIResponse, vtThisPresTimes, vfThisTrialTrace, 'Color', 0.25 * [1 1 1], 'LineWidth', 2);
+      end
       hold(handles.axROIResponse, 'on');
       
       % - Accumulate stim traces
@@ -239,11 +254,22 @@ for (nStim = 1:size(handles.mfStimMeanResponses, 2))
    % - Plot the average fluorescence trace for the region
    nStimLength = numel(vfAvgStimTrace);
    vtThisStimTime = vtStimulusBlockStartTimes(nStim) + ((0:nStimLength-1)+0.5) * handles.fsStack.tFrameDuration;
-   plot(handles.axROIResponse, vtThisStimTime, vfAvgStimTrace ./ vnNorm, 'r-', 'LineWidth', 1);
+   
+   if (bUsedFF)
+      plot(handles.axROIResponse, vtThisStimTime, vfAvgStimTrace ./ vnNorm * 100, 'r-', 'LineWidth', 1);
+   else
+      plot(handles.axROIResponse, vtThisStimTime, vfAvgStimTrace ./ vnNorm, 'r-', 'LineWidth', 1);
+   end
 end
 
 xlabel(handles.axROIResponse, 'Time (s)');
-ylabel(handles.axROIResponse, 'ROI Response (dF/F%)');
+
+if (bUsedFF)
+   ylabel(handles.axROIResponse, 'ROI Response (dF/F%)');
+else
+   ylabel(handles.axROIResponse, 'ROI Response (raw)');
+end
+
 axis(handles.axROIResponse, 'tight');
 
    
@@ -298,22 +324,49 @@ if (~isfield(handles, 'tfGaussian'))
    for (nStimID = prod(handles.vnNumPixels):-1:1)
       tfDistanceMeshSqr(:, :, nStimID) = (handles.mfXMesh - handles.mfXStimCentreMesh(nStimID)).^2 + (handles.mfYMesh - handles.mfYStimCentreMesh(nStimID)).^2; %#ok<AGROW>
    end
-   handles.tfGaussian = 1/(2*pi*(handles.fPixelSizeDeg/4).^2) .* exp(-1/(2*(handles.fPixelSizeDeg).^2) .* tfDistanceMeshSqr);
+   
+   fRFSigma = handles.fPixelSizeDeg/4 * 2;
+   handles.tfGaussian = exp(-1/(2*fRFSigma.^2) .* tfDistanceMeshSqr);
 end
 
 % - Iterate over ROIs and build up a Gaussian RF estimate
 mfRFImage = zeros(size(handles.mfXMesh));
 
+% - Should we use Z-scored responses, or raw responses?
+if (~isempty(handles.mfStimZScores))
+   bUsedFF = true;
+else
+   bUsedFF = false;
+end
+
+% - Get the responses
+if (bUsedFF)
+   mfStimResp = handles.mfStimZScores;
+   fThreshold = 3;
+else
+   mfStimResp = handles.mfStimMeanResponses;
+   fThreshold = 0;
+end
+
+% - Clip below threshold responses
+mfStimResp(mfStimResp < fThreshold) = nan;
+
 for (nROI = vnSelectedROIs)
    % - Accumulate Gaussians over stimulus locations for this RF
    if (handles.tBlankStimTime ~= 0)
-      vfROIResponse = handles.mfStimMeanResponses(nROI, 2:end);
+      vfROIResponse = mfStimResp(nROI, 2:end);
    else
-      vfROIResponse = handles.mfStimMeanResponses(nROI, :);
+      vfROIResponse = mfStimResp(nROI, :);
    end
    vfROIResponse = permute(vfROIResponse, [3 1 2]);
    
-   mfRFImage = mfRFImage + sum(bsxfun(@times, handles.tfGaussian, vfROIResponse), 3);
+   mfRFImage = mfRFImage + nansum(bsxfun(@times, handles.tfGaussian, vfROIResponse), 3) ./ numel(vnSelectedROIs);
+end
+
+if (bUsedFF)
+   handles.strRFDataDescription = 'RF values are the Z-score of response';
+else
+   handles.strRFDataDescription = 'RF values are the raw response';
 end
 
 % - Store object data
@@ -376,6 +429,7 @@ function pbExportRF_Callback(hObject, eventdata, handles)
 
 sExport.vnSelectedROIs = get(handles.lbROIList, 'Value');
 sExport.mfRFImage = MakeRFImage(hObject, handles, sExport.vnSelectedROIs);
+sExport.strRFDataDescription = handles.strRFDataDescription;
 sExport.tfOverviewImage = handles.tfOverviewImage;
 sExport.cstrFilenames = handles.fsStack.cstrFilenames;
 sExport.sRegions = handles.sRegionsPlusNP;
@@ -394,9 +448,33 @@ sExport.sResponses.vbUseFrame = handles.vbUseFrame;
 sExport.sResponses.vfBlankStds = handles.vfBlankStds;
 sExport.sResponses.mfStimMeanResponses = handles.mfStimMeanResponses;
 sExport.sResponses.mfStimStds = handles.mfStimStds;
+sExport.sResponses.mfStimZScores = handles.mfStimZScores;
 sExport.sResponses.mfRegionTraces = handles.mfRegionTraces;
 sExport.sResponses.tfTrialResponses = handles.tfTrialResponses;
 sExport.sResponses.tnTrialSampleSizes = handles.tnTrialSampleSizes;
+sExport.sResponses.tfBlankStdsCorr = handles.tfBlankStdsCorr;
+sExport.sResponses.tfStimZScoresTrials = handles.tfStimZScoresTrials;
+
+% -- Find population RF center and size
+
+if (~isempty(handles.mfStimZScores))
+   fRFThreshold = 3;
+else
+   fRFThreshold = eps;
+end
+
+mnRFPeaks = FindPeaks(sExport.mfRFImage, ...
+                      handles.fPixelSizeDeg .* size(sExport.mfRFImage, 1) ./ handles.vfScreenSizeDeg(1), ...
+                      sExport.mfRFImage > fRFThreshold);
+
+% - Find maximum peak
+vfRFMagnitude = sExport.mfRFImage(sub2ind(size(sExport.mfRFImage), mnRFPeaks(:, 2), mnRFPeaks(:, 1)));
+[nul, nRFIndex] = nanmax(vfRFMagnitude);
+
+% - Convert to degrees offset from center of screen
+sExport.vfRFOffsetDeg = (mnRFPeaks(nRFIndex, [2 1]) - size(sExport.mfRFImage)./2) .* (handles.vfScreenSizeDeg ./ size(sExport.mfRFImage));
+
+% - Estimate population RF size
 
 
 % - Export RF structure

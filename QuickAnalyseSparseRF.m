@@ -118,7 +118,7 @@ catch meErr
    rethrow(meErr);
 end
 
-fsStack.fPixelsPerUM = 5;
+fsStack.fPixelsPerUM = 3*fsStack.fPixelsPerUM;
 
 % - Save stack
 save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
@@ -172,12 +172,17 @@ if (bAssignBlank)
    sRegionsPlusNP.vfRegionMaxZScores = vfMaxZScores(vnSort);
    mfRegionTraces = mfRegionTraces(vnSort, :);
    tfTrialResponses = tfTrialResponses(vnSort, :, :); %#ok<NASGU>
+   
+else
+   mfStimZScores = [];
+   tfBlankStdsCorr = [];
+   tfStimZScoresTrials = [];
 end
 
 % - Save responses
 save(strTempFilename, 'vfBlankStds', 'mfStimMeanResponses', 'mfStimStds', ...
    'mfRegionTraces', 'tfTrialResponses', 'tnTrialSampleSizes', 'sRegionsPlusNP', ...
-   '-append');
+   'mfStimZScores', 'tfBlankStdsCorr', 'tfStimZScoresTrials', '-append');
 
 
 %% -- Create figures
@@ -194,7 +199,8 @@ save(strTempFilename, 'vfBlankStds', 'mfStimMeanResponses', 'mfStimStds', ...
 
 RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
       vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
-      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, tBlankStimTime);
+      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, tBlankStimTime, ...
+      mfStimZScores, tfBlankStdsCorr, tfStimZScoresTrials);
 
 
 
@@ -254,7 +260,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
             tfPresBlank = double(fsStack.AlignedStack(:, :, vbPresBlankFrames, 1));
             
             % - Assign the mean; Std.Dev is taken from block blank
-            fsStack.AssignBlankFrame(cat(3, nanmean(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
+            fsStack.AssignBlankFrame(cat(3, nanmedian(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
          end
       end
       

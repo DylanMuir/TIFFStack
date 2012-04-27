@@ -123,7 +123,12 @@ for (nRegion = nNumRegions:-1:1)  % Go backwards to pre-allocate
    mfRegionTraces(nRegion, :) = vfRegionTrace;
 
    % - Work out population blank std. devs
-   vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+   if (~isempty(nBlankStimID))
+      vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+   else
+      vbBlankFrames = ~vbUseFrame;
+   end
+   
    [mfBlankTrace, vfRegionBlank] = fhExtractionFunction(fsStack, sRegions.PixelIdxList{nRegion}, vbBlankFrames);
    vfBlankStds(nRegion) = nanstd(vfRegionBlank);
    
