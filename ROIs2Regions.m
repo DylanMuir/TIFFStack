@@ -25,7 +25,7 @@ for (nROIIndex = numel(cvsROIs):-1:1)
       case 'oval'
          % - Draw an oval inside the bounding box
          mbThisMask = ellipse2mask('bounds', vnImageSize, sThisROI.vnRectBounds);
-         sRegions.PixelIdxList{nROIIndex} = find(mbThisMask);
+         sRegions.PixelIdxList{nROIIndex} = find(mbThisMask');
          
       otherwise
          warning( 'ROIs2Regions:unsupported', ...

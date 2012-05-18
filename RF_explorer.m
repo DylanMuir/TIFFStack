@@ -17,7 +17,7 @@ function varargout = RF_explorer(varargin)
 
 % Edit the above text to modify the response to help RF_explorer
 
-% Last Modified by GUIDE v2.5 19-Apr-2012 17:33:35
+% Last Modified by GUIDE v2.5 18-May-2012 13:10:24
 
 %% -- Initialisation code
 
@@ -164,6 +164,7 @@ end
 % - Plot the overview image and scale bar
 cla(handles.ax2PImage);
 image(handles.tfOverviewImage, 'Parent', handles.ax2PImage);
+axis(handles.ax2PImage, 'ij');
 set(handles.figRFExplorer ,'CurrentAxes', handles.ax2PImage)
 PlotScaleBar(handles.fsStack.fPixelsPerUM, 25, 'tr', 'w-', 'LineWidth', 5, 'Parent', handles.ax2PImage);
 
@@ -296,9 +297,14 @@ tfOverviewImage(:, :, 2) = tfOverviewImage(:, :, 2) ./ max(max(tfOverviewImage(:
 tfOverviewImage(:, :, 3) = 0;
 
 
-function mfRFImage = MakeRFImage(hObject, handles, vnSelectedROIs)
+function mfRFImage = MakeRFImage(hObject, handles, vnSelectedROIs, bSuppressProgress)
 
+% - Defaults
 DEF_nRFSamplesPerDeg = 4;
+
+if (~exist('bSuppressProgress', 'var') || isempty(bSuppressProgress))
+   bSuppressProgress = false;
+end
 
 % - Make a mesh
 if (~isfield(handles, 'mfXMesh'))
@@ -351,8 +357,14 @@ end
 % - Clip below threshold responses
 mfStimResp(mfStimResp < fThreshold) = nan;
 
-for (nROI = vnSelectedROIs)
+if (~bSuppressProgress)
+   fprintf(1, '--- RF_explorer: Estimating receptive field [%6.2f%%]', 0);
+end
+
+for (nROIIndex = 1:numel(vnSelectedROIs))
    % - Accumulate Gaussians over stimulus locations for this RF
+   nROI = vnSelectedROIs(nROIIndex);
+   
    if (handles.tBlankStimTime ~= 0)
       vfROIResponse = mfStimResp(nROI, 2:end);
    else
@@ -361,6 +373,14 @@ for (nROI = vnSelectedROIs)
    vfROIResponse = permute(vfROIResponse, [3 1 2]);
    
    mfRFImage = mfRFImage + nansum(bsxfun(@times, handles.tfGaussian, vfROIResponse), 3) ./ numel(vnSelectedROIs);
+   
+   if (~bSuppressProgress)
+      fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]', nROIIndex / numel(vnSelectedROIs) * 100);
+   end
+end
+
+if (~bSuppressProgress)
+   fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]\n', 100);
 end
 
 if (bUsedFF)
@@ -420,15 +440,68 @@ end
 
 
 % --- Executes on button press in pbExportRF.
-function pbExportRF_Callback(hObject, eventdata, handles)
+function pbExportRF_Callback(hObject, eventdata, handles) %#ok<*INUSL>
 % hObject    handle to pbExportRF (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+% - Get ROIs to average together
+vnSelectedROIs = get(handles.lbROIList, 'Value');
+
+% - Make an RF export structure
+sExport = RFExportStruct(hObject, handles, vnSelectedROIs);
+
+% - Export RF structure
+strVarname = sprintf('sRF_group_%s', datestr(now, 'yyyymmdd_HHMM'));
+assignin('base', strVarname, sExport);
+
+fprintf(1, '--- RF_explorer: Receptive field exported to %s\n', strVarname);
+
+
+% --- Executes on button press in pbExportAll.
+function pbExportAll_Callback(hObject, eventdata, handles)
+% hObject    handle to pbExportAll (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% - Get ROIs to export
+vnSelectedROIs = 1:handles.sRegionsPlusNP.NumObjects;
+
+% -- Make RF export structures
+
+fprintf(1, '--- RF_explorer: Exporting RFs for all ROIs [%6.2f%%]', 0);
+
+for (nROIIndex = numel(vnSelectedROIs):-1:1)
+   % - Get this RF export structure
+   vsRFExport(nROIIndex) = RFExportStruct(hObject, handles, vnSelectedROIs(nROIIndex), true);
+   
+   fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]', (1 - nROIIndex / numel(vnSelectedROIs)) * 100);
+end
+
+fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]\n', 100);
+
+% - Rearrange RF structure
+sRFGroup = vsRFExport(1);
+sRFGroup = rmfield(sRFGroup, {'mfRFImage', 'vfRFOffsetDeg', 'vnSelectedROIs'});
+sRFGroup.vsRFEstimates = rmfield(vsRFExport, {'strRFDataDescription', 'tfOverviewImage', 'cstrFilenames', 'sRegions', 'sParams', 'sResponses'});
+
+% - Export RF structure
+strVarname = sprintf('sRF_estimates_%s', datestr(now, 'yyyymmdd_HHMM'));
+assignin('base', strVarname, sRFGroup);
+
+fprintf(1, '--- RF_explorer: Receptive fields exported to %s\n', strVarname);
+
+
+function [sExport] = RFExportStruct(hObject, handles, vnSelectedROIs, bSuppressProgress)
+
+if (~exist('bSuppressProgress', 'var'))
+   bSuppressProgress = false;
+end
+
 % -- Create data for export
 
-sExport.vnSelectedROIs = get(handles.lbROIList, 'Value');
-sExport.mfRFImage = MakeRFImage(hObject, handles, sExport.vnSelectedROIs);
+sExport.vnSelectedROIs = vnSelectedROIs;
+sExport.mfRFImage = MakeRFImage(hObject, handles, sExport.vnSelectedROIs, bSuppressProgress);
 sExport.strRFDataDescription = handles.strRFDataDescription;
 sExport.tfOverviewImage = handles.tfOverviewImage;
 sExport.cstrFilenames = handles.fsStack.cstrFilenames;
@@ -475,13 +548,3 @@ vfRFMagnitude = sExport.mfRFImage(sub2ind(size(sExport.mfRFImage), mnRFPeaks(:, 
 sExport.vfRFOffsetDeg = (mnRFPeaks(nRFIndex, [2 1]) - size(sExport.mfRFImage)./2) .* (handles.vfScreenSizeDeg ./ size(sExport.mfRFImage));
 
 % - Estimate population RF size
-
-
-% - Export RF structure
-strVarname = sprintf('sRF%s', datestr(now, '_yyyymmdd_HHMM'));
-assignin('base', strVarname, sExport);
-
-fprintf(1, '--- RF_explorer: Receptive field exported to %s\n', strVarname);
-
-
-

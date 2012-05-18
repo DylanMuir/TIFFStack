@@ -2,7 +2,7 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
    vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
    tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
    bAlign, bAssignBlack, bAssignBlank, ...
-   tForceStackFrameDuration, cvnForceStackSequenceIDs)
+   tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet)
 
 
 % QuickAnalyseSparseRF - FUNCTION
@@ -11,7 +11,7 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
 %                               vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
 %                               tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
-%                               tForceStackFrameDuration, cvnForceStackSequenceIDs)
+%                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet)
 
 % -- Defaults
 
@@ -118,7 +118,8 @@ catch meErr
    rethrow(meErr);
 end
 
-fsStack.fPixelsPerUM = 3*fsStack.fPixelsPerUM;
+fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
+% fsStack.fPixelsPerUM = 5;
 
 % - Save stack
 save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
@@ -127,11 +128,15 @@ save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg'
 %% -- Define ROIs
 
 % -- Automatically define regions
-disp('--- QuickAnalyseSparseRF: Identifying ROIs...');
-if (size(fsStack, 4) > 1)
-   sRegions = FindCells_GRChannels(fsStack);
+if (~exist('strImageJRoiSet', 'var') || isempty(strImageJRoiSet))   
+   disp('--- QuickAnalyseSparseRF: Identifying ROIs...');
+   if (size(fsStack, 4) > 1)
+      sRegions = FindCells_GRChannels(fsStack);
+   else
+      sRegions = FindCells_GChannel(fsStack);
+   end
 else
-   sRegions = FindCells_GChannel(fsStack);
+   sRegions = ROIs2Regions(ReadImageJROI(strImageJRoiSet), size(fsStack, [1 2]));
 end
 
 % - Add a "neuropil" region
