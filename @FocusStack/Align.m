@@ -2,7 +2,8 @@ function [mfFrameOffsets] = Align(oStack, varargin)
 
 % Align - METHOD Calculate an alignment for a stack
 %
-% Usage: [<mfFrameOffsets>] = Align(oStack <, vnChannel, bProgressive, nUpsampling>)
+% Usage: [<mfFrameOffsets>] = Align(oStack <, vnChannel, bProgressive, nUpsampling, mfReferenceImage>)
+%        [<mfFrameOffsets>] = Align(oStack <, vnChannel, bProgressive, nUpsampling, nReferenceFrame>)
 %
 % The stack 'oStack' will be aligned, and the alignment will be recorded in the
 % stack.
@@ -11,6 +12,16 @@ function [mfFrameOffsets] = Align(oStack, varargin)
 bConvertToDFF = oStack.bConvertToDFF;
 oStack.bConvertToDFF = false;
 
+% - Was a reference supplied?
+if (nargin > 4)
+   % - Was it a reference frame index?
+   if (isscalar(varargin{4}))
+      % - Yes, so extract the requisite frame (mean of all channels)
+      varargin{4} = nanmean(oStack.ExtractFrames({':', ':', varargin{4}, varargin{1}}), 4);
+   end
+end
+
+% - Compute frame alignments
 mfFrameOffsets = GetStackAlignment(oStack, varargin{:});
 oStack.mfFrameShifts = mfFrameOffsets;
 oStack.vbCachedAlignedFrames = [];

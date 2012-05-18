@@ -94,7 +94,7 @@ try
    % -- Align stack, if requested
    if (bAlign)
       disp('--- QuickAnalyseSparseRF: Aligning...');
-      fsStack.Align(1, false, 10);
+      fsStack.Align(1, false, 10, 10);
    end
    
    % -- Assign black, if requested

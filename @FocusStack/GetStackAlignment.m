@@ -93,7 +93,7 @@ if (~bProgressive)
    if (~exist('mfReferenceFrame', 'var'))
       mfFFTInitialFrame = fft2(sum(tfStack.ExtractFrames({':', ':', 1, vnChannel}), 4));
    else
-      mfFFTInitialFrame = mfReferenceImage;
+      mfFFTInitialFrame = fft2(mfReferenceImage);
    end
 end
 
