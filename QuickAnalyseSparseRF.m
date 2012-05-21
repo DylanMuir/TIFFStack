@@ -2,7 +2,9 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
    vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
    tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
    bAlign, bAssignBlack, bAssignBlank, ...
-   tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet)
+   tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
+   mfCustomAlignment, bOrderROIs)
+
 
 
 % QuickAnalyseSparseRF - FUNCTION
@@ -11,7 +13,8 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
 %                               vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
 %                               tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
-%                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet)
+%                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
+%                               mfCustomAlignment, bOrderROIs)
 
 % -- Defaults
 
@@ -19,7 +22,8 @@ DEF_bAlign = false;
 DEF_bAssignBlack = false;
 DEF_bAssignBlank = false;
 DEF_nPointsPerDeg = 4;
-
+DEF_mfCustomAlignment = 10;
+DEF_bOrderROIs = true;
 
 %% -- Check arguments, assign defaules
 
@@ -39,6 +43,14 @@ end
 
 if (~exist('bAssignBlank', 'var') || isempty(bAssignBlank))
    bAssignBlank = DEF_bAssignBlank;
+end
+
+if (~exist('mfCustomAlignment', 'var') || isempty(mfCustomAlignment))
+   mfCustomAlignment = DEF_mfCustomAlignment;
+end
+
+if (~exist('bOrderROIs', 'var') || isempty(bOrderROIs))
+   bOrderROIs = DEF_bOrderROIs;
 end
 
 
@@ -94,7 +106,8 @@ try
    % -- Align stack, if requested
    if (bAlign)
       disp('--- QuickAnalyseSparseRF: Aligning...');
-      fsStack.Align(1, false, 10, 10);
+      nAlignChannel = size(fsStack, 4);
+      fsStack.Align(nAlignChannel, false, 10, mfCustomAlignment);
    end
    
    % -- Assign black, if requested
@@ -169,14 +182,16 @@ if (bAssignBlank)
    tfStimZScoresTrials = tfTrialResponses ./ tfBlankStdsCorr;
    
    % - Sort by Z-score
-   vfMaxZScores = max(mfStimZScores, [], 2);
-   vfMaxZScores(1) = inf;  % - Force NP inclusion, as first region
-   [nul, vnSort] = sort(vfMaxZScores, 'descend');
-   
-   sRegionsPlusNP.PixelIdxList = sRegionsPlusNP.PixelIdxList(vnSort);
-   sRegionsPlusNP.vfRegionMaxZScores = vfMaxZScores(vnSort);
-   mfRegionTraces = mfRegionTraces(vnSort, :);
-   tfTrialResponses = tfTrialResponses(vnSort, :, :); %#ok<NASGU>
+   if (bOrderROIs)
+      vfMaxZScores = max(mfStimZScores, [], 2);   
+      vfMaxZScores(1) = inf;  % - Force NP inclusion, as first region
+      [nul, vnSort] = sort(vfMaxZScores, 'descend');
+      
+      sRegionsPlusNP.PixelIdxList = sRegionsPlusNP.PixelIdxList(vnSort);
+      sRegionsPlusNP.vfRegionMaxZScores = vfMaxZScores(vnSort);
+      mfRegionTraces = mfRegionTraces(vnSort, :);
+      tfTrialResponses = tfTrialResponses(vnSort, :, :); %#ok<NASGU>
+   end
    
 else
    mfStimZScores = [];

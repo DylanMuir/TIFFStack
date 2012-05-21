@@ -545,6 +545,10 @@ vfRFMagnitude = sExport.mfRFImage(sub2ind(size(sExport.mfRFImage), mnRFPeaks(:, 
 [nul, nRFIndex] = nanmax(vfRFMagnitude);
 
 % - Convert to degrees offset from center of screen
-sExport.vfRFOffsetDeg = (mnRFPeaks(nRFIndex, [2 1]) - size(sExport.mfRFImage)./2) .* (handles.vfScreenSizeDeg ./ size(sExport.mfRFImage));
+if (~isempty(mnRFPeaks))
+   sExport.vfRFOffsetDeg = (mnRFPeaks(nRFIndex, [2 1]) - size(sExport.mfRFImage)./2) .* (handles.vfScreenSizeDeg ./ size(sExport.mfRFImage));
+else
+   sExport.vfRFOffsetDeg = [];
+end
 
 % - Estimate population RF size

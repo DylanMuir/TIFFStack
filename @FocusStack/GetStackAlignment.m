@@ -90,7 +90,7 @@ mfFrameOffsets = zeros(nNumFrames, 2);
 
 % - Compute first frame FFT, if doing first frame only registration
 if (~bProgressive)
-   if (~exist('mfReferenceFrame', 'var'))
+   if (~exist('mfReferenceImage', 'var'))
       mfFFTInitialFrame = fft2(sum(tfStack.ExtractFrames({':', ':', 1, vnChannel}), 4));
    else
       mfFFTInitialFrame = fft2(mfReferenceImage);
@@ -100,7 +100,7 @@ end
 % - Show some progress
 fprintf(1, 'Measuring stack alignment: %3d%%', 0);
 
-for (nFrame = 2:nNumFrames)
+for (nFrame = 1:nNumFrames)
    % - Compute the FFT for this frame
    mfFFTThisFrame = fft2(sum(tfStack.ExtractFrames({':', ':', nFrame, vnChannel}), 4));
 
