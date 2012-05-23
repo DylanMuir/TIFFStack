@@ -151,6 +151,9 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
       sHeader.nNumFrames = size(oStack.vhMemMapFileHandles{nFile}, 3);
       sHeader.nStimulusID = nan;
       sHeader.tBlankTime = nan;
+
+      % - Sequence is unknown
+      sHeader.vnSequenceIDs = nan;
    end
    
    if (nFile == 1)

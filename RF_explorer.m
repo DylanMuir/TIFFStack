@@ -195,9 +195,9 @@ axis(handles.ax2PImage, 'equal');
 set(handles.ax2PImage, 'Color', [0 0 0], 'XTick', [], 'YTick', []);
 
 % - Plot the receptive field for the selected ROIs
-mfRFImage = MakeRFImage(hObject, handles, vnLabelRegions);
+handles.mfCurrRFImage = MakeRFImage(hObject, handles, vnLabelRegions);
 cla(handles.axRF);
-imagesc(mfRFImage', 'Parent', handles.axRF);
+imagesc(handles.mfCurrRFImage', 'Parent', handles.axRF);
 axis(handles.axRF, 'equal', 'ij');
 set(handles.axRF, 'Color', [0 0 0], 'XTick', [], 'YTick', []);
 
@@ -272,6 +272,10 @@ else
 end
 
 axis(handles.axROIResponse, 'tight');
+
+% - Store object data
+guidata(hObject, handles);
+
 
    
 function tfOverviewImage = MakeOverviewImage(fsData)

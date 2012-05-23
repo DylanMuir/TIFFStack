@@ -11,6 +11,7 @@
 %           mtVariable = MappedTensor(nDim1, nDim2, nDim3, ...)
 %           mtVariable = MappedTensor(strExistingFilename, ...)
 %           mtVariable = MappedTensor(..., 'Class', strClassName)
+%           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -22,6 +23,10 @@
 % By default the tensor will have class 'double'.  This can be specified as an
 % argument to MappedTensor.  Supported classes: char, int8, uint8, logical,
 % int16, uint16, int32, uint32, single, int64, uint64, double.
+%
+% The optional parameter 'nHeaderBytesToSkip' allows you to skip over the
+% beginning of an (existing) binary file, by throwing away the specified
+% number of header bytes.
 %
 % Usage: size(mtVariable)
 %        mtVariable(:) = rand(100, 100, 100);
@@ -120,6 +125,7 @@ classdef MappedTensor < handle
       bIsComplex = false;     % A boolean indicating the the data has a complex part
       fComplexFactor = 1;     % A factor multiplied by the complex part of the tensor (used for scalar multiplication and negation)
       fRealFactor = 1;        % A factor multiplied by the real part of the tensor (used for scalar multiplication and negation)
+      nHeaderBytes = 0;       % The number of bytes to skip at the beginning of the file
    end
    
    methods
@@ -134,6 +140,12 @@ classdef MappedTensor < handle
                   case {'class'}
                      % - A non-default class was specified
                      mtVar.strClass = varargin{nArg+1};
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
+                  case {'HeaderBytes'}
+                     % - A number of header bytes was specified
+                     mtVar.nHeaderBytes = varargin{nArg+1};
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
@@ -174,12 +186,12 @@ classdef MappedTensor < handle
             vnTensorSize = [varargin{:}];
             
             % - Make enough space for a tensor
-            mtVar.strRealFilename = CreateTempFile(prod(vnTensorSize) * mtVar.nClassSize);
+            mtVar.strRealFilename = CreateTempFile(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
          
          % - Memory-map the file
          cFormat = {mtVar.strStorageClass vnTensorSize 'Tensor'};         
-         mtVar.mmfRealVar = memmapfile(mtVar.strRealFilename, 'Format', cFormat, 'Writable', true);
+         mtVar.mmfRealVar = memmapfile(mtVar.strRealFilename, 'Format', cFormat, 'Writable', true, 'Offset', mtVar.nHeaderBytes);
          
          % - Initialise dimension order
          mtVar.vnDimensionOrder = 1:numel(vnTensorSize);
@@ -911,5 +923,7 @@ function [nBytes, strStorageClass] = ClassSize(strClass)
          error('MappedTensor:InvalidClass', '*** MappedTensor/ClassSize: Invalid class specifier.');
    end
 end
+
+function 
 
 % --- END of MappedTensor CLASS ---
