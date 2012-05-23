@@ -28,7 +28,7 @@ for (nFrame = numel(vnFrames):-1:1) % Go backwards to pre-allocate
          
          [ IMG.MM_stack, IMG.MM_wavelength, IMG.MM_private2 ] = splitMetamorph(ii, TIF);
          
-         stack(nFrame) = IMG; %#ok<AGROW>
+         stack(nFrame) = IMG'; %#ok<AGROW>
          
       end
       
@@ -39,7 +39,7 @@ for (nFrame = numel(vnFrames):-1:1) % Go backwards to pre-allocate
       StripCnt = 1;
       %read the image channels
       for c = 1:HEADER(nFrame).SamplesPerPixel
-         data(:, :, nFrame, c) = read_plane(TIF, HEADER(vnFrames(nFrame)), 0, c, StripCnt);
+         data(:, :, nFrame, c) = read_plane(TIF, HEADER(vnFrames(nFrame)), 0, c, StripCnt)';
       end
    end
 end
