@@ -112,8 +112,8 @@ classdef MappedTensor < handle
    properties (SetAccess = private, GetAccess = private)
       strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
-      mmfRealVar;             % Memory-mapped handle (real part of tensor)
-      mmfCmplxVar;            % Memory-mapped handle (complex part of tensor)
+      hRealContent;           % File handle for data (real part)
+      hCmplxContent;          % File handle for data (complex part)
       bTemporary;             % A flag which records whether a temporary file was created by MappedTensor
       strClass = 'double';    % The class of this mapped tensor
       strStorageClass;        % The storage class of this tensor on disk
@@ -143,7 +143,7 @@ classdef MappedTensor < handle
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
-                  case {'HeaderBytes'}
+                  case {'headerbytes'}
                      % - A number of header bytes was specified
                      mtVar.nHeaderBytes = varargin{nArg+1};
                      vbKeepArg(nArg:nArg+1) = false;
@@ -189,9 +189,8 @@ classdef MappedTensor < handle
             mtVar.strRealFilename = CreateTempFile(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
          
-         % - Memory-map the file
-         cFormat = {mtVar.strStorageClass vnTensorSize 'Tensor'};         
-         mtVar.mmfRealVar = memmapfile(mtVar.strRealFilename, 'Format', cFormat, 'Writable', true, 'Offset', mtVar.nHeaderBytes);
+         % - Open the file
+         mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+');
          
          % - Initialise dimension order
          mtVar.vnDimensionOrder = 1:numel(vnTensorSize);
@@ -207,9 +206,12 @@ classdef MappedTensor < handle
       function delete(mtVar)
          % - Delete the file, if a temporary file was created for this variable
          try
-            % - Clear the mapped file handles
-            mtVar.mmfRealVar = [];
-            mtVar.mmfCmplxVar = [];
+            % - Close the file handles
+            fclose(mtVar.hRealContent);
+            
+            if (mtVar.bIsComplex)
+               fclose(mtVar.hCmplxContent);
+            end
 
             if (mtVar.bTemporary)
                % - Really delete the temporary file, don't just put it in the trash
@@ -224,7 +226,6 @@ classdef MappedTensor < handle
                delete(mtVar.strCmplxFilename);
                recycle(strState);
             end
-            
             
          catch mtErr
             % - Die gracefully if we couldn't delete the temporary file
@@ -320,11 +321,11 @@ classdef MappedTensor < handle
          % - Reference the tensor data element
          if (mtVar.bIsComplex)
             % - Get the real and complex parts
-            tfData = complex( mtVar.fRealFactor * subsref(mtVar.mmfRealVar.Data.Tensor, subs), ...
-                              mtVar.fComplexFactor * subsref(mtVar.mmfCmplxVar.Data.Tensor, subs));
+            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes), ...
+                             mtVar.fComplexFactor .* mt_read_data(mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes));
          else
             % - Just return the real part
-            tfData = mtVar.fRealFactor * subsref(mtVar.mmfRealVar.Data.Tensor, subs);
+            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes);
          end
          
          % - Permute dimensions
@@ -366,11 +367,10 @@ classdef MappedTensor < handle
                end
                
                % - Make enough space for a tensor
-               mtVar.strCmplxFilename = CreateTempFile(mtVar.nNumElements * mtVar.nClassSize);
+               mtVar.strCmplxFilename = CreateTempFile(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
             
-               % - Memory-map the file
-               cFormat = {mtVar.strStorageClass mtVar.vnOriginalSize 'Tensor'};
-               mtVar.mmfCmplxVar = memmapfile(mtVar.strCmplxFilename, 'Format', cFormat, 'Writable', true);
+               % - Open the file
+               mtVar.hCmplxContent = fopen(mtVar.strCmplxFilename, 'r+');
                
                % - Record that the tensor has a complex part
                mtVar.bIsComplex = true;
@@ -382,19 +382,17 @@ classdef MappedTensor < handle
             tfData = cast(tfData, mtVar.strStorageClass);
          end
          
-         % - Assign to the tensor data element
-         sSubs = [substruct('.', 'Data', '.', 'Tensor') subs];
-         
          % - Permute input data
          tfData = ipermute(tfData, mtVar.vnDimensionOrder);
          
          if (~isreal(tfData))
             % - Assign to both real and complex parts
-            mtVar.mmfRealVar = subsasgn(mtVar.mmfRealVar, sSubs, real(tfData) ./ mtVar.fRealFactor);
-            mtVar.mmfCmplxVar = subsasgn(mtVar.mmfCmplxVar, sSubs, imag(tfData) ./ mtVar.fComplexFactor);
+            mt_write_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor);
+            mt_write_data(mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor);
+
          else
             % - Assign only real part
-            mtVar.mmfRealVar = subsasgn(mtVar.mmfRealVar, sSubs, tfData ./ mtVar.fRealFactor);
+            mt_write_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor);
          end
       end
       
@@ -881,7 +879,7 @@ end
 
 %% --- Helper functions ---
 
-function strFilename = CreateTempFile(nNumBytes)
+function strFilename = CreateTempFile(nNumEntries)
    % - Get the name of a temporary file
    strFilename = tempname;
    
@@ -889,7 +887,7 @@ function strFilename = CreateTempFile(nNumBytes)
    hFile = fopen(strFilename, 'w+');
    
    % - Allocate enough space
-   fwrite(hFile, 0, 'uint8', nNumBytes-1);
+   fwrite(hFile, 0, 'uint8', nNumEntries-1);
    fclose(hFile);
 end
 
@@ -924,6 +922,127 @@ function [nBytes, strStorageClass] = ClassSize(strClass)
    end
 end
 
-function 
+%% Read / write functions
 
+function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes)
+   % - Check referencing and convert to linear indices
+   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
+   
+   % - Split into readable chunks
+   cvnFileChunkIndices = SplitFileChunks(vnLinearIndices);
+   nNumChunks = numel(cvnFileChunkIndices);
+   
+   % - Allocate data
+   [nClassSize, strStorageClass] = ClassSize(strClass);
+   tData = zeros(vnDataSize, strStorageClass);
+   
+   % - Read data in chunks
+   nDataPointer = 1;
+   for (nChunkIndex = 1:nNumChunks)
+      % - Seek file to beginning of chunk
+      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}(1)-1) * nClassSize + nHeaderBytes, 'bof');
+      
+      % - Read chunk into return tensor
+      nChunkSize = numel(cvnFileChunkIndices{nChunkIndex});
+      tData(nDataPointer:nDataPointer+nChunkSize-1) = fread(hDataFile, nChunkSize, [strStorageClass '=>' strClass]);
+      
+      % - Shift to next data chunk
+      nDataPointer = nDataPointer + nChunkSize;
+   end
+end
+
+function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData)
+   % - Check referencing and convert to linear indices
+   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
+   
+   % - Split into writable chunks
+   cvnFileChunkIndices = SplitFileChunks(vnLinearIndices);
+   nNumChunks = numel(cvnFileChunkIndices);
+
+   % - Do we need to replicate the data?
+   if (isscalar(tData) && prod(vnDataSize) > 1)
+      tData = repmat(tData, prod(vnDataSize), 1);
+
+   elseif (numel(tData) ~= prod(vnDataSize))
+      % - The was a mismatch in the sizes of the left and right sides
+      error('MappedTensor:index_assign_element_count_mismatch', ...
+            '*** MappedTensor: In an assignment A(I) = B, the number of elements in B and I must be the same.');
+   end
+   
+   % - Write data in chunks
+   nDataPointer = 1;
+   [nClassSize, strStorageClass] = ClassSize(strClass);
+   for (nChunkIndex = 1:nNumChunks)
+      % - Seek file to beginning of chunk
+      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}(1)-1) * nClassSize + nHeaderBytes, 'bof');
+      
+      % - Write chunk
+      nChunkSize = numel(cvnFileChunkIndices{nChunkIndex});
+      fwrite(hDataFile, tData(nDataPointer:nDataPointer+nChunkSize-1), strStorageClass);
+      
+      % - Shift to next data chunk
+      nDataPointer = nDataPointer + nChunkSize;
+   end
+end
+
+
+function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
+   % - Handle linear indexing
+   if (numel(cRefs) == 1)
+      vnLims = prod(vnLims);
+   end
+
+   % - Check each dimension in turn
+   for (nRefDim = numel(cRefs):-1:1) %#ok<FORPF>
+      % - Convert colon references
+      if (ischar(cRefs{nRefDim}) && isequal(cRefs{nRefDim}, ':'))
+         cCheckedRefs{nRefDim} = 1:vnLims(nRefDim); %#ok<AGROW>
+         
+      elseif (islogical(cRefs{nRefDim}))
+         % - Logical referencing -- convert to indexed referencing
+         vnIndices = find(cRefs{nRefDim}(:));
+         if (any(vnIndices > vnLims(nRefDim)))
+            error('FocusStack:InvalidRef', ...
+               '*** FocusStack/GetFullFileRefs: Logical referencing for dimension [%d] was out of bounds [1..%d].', ...
+               nRefDim, vnLims(nRefDim));
+         end
+         cCheckedRefs{nRefDim} = vnIndices; %#ok<AGROW>
+         
+      elseif (any(cRefs{nRefDim}(:) < 1) || any(cRefs{nRefDim}(:) > vnLims(nRefDim)))
+         % - Check limits
+         error('MappedTensor:InvalidRef', ...
+            '*** MappedTensor: Reference dimension [%d] was out of bounds [1..%d].', ...
+            nRefDim, vnLims(nRefDim));
+         
+      else
+         % - This dimension was ok
+         cCheckedRefs{nRefDim} = cRefs{nRefDim}(:); %#ok<AGROW>
+      end
+   end
+   
+   % - Convert to linear indexing
+   if (numel(cRefs) == 1)
+      vnLinearIndices = cCheckedRefs{1};
+   else
+      [cFullRefs{1:numel(cRefs)}] = ndgrid(cCheckedRefs{:});
+      vnLinearIndices = sub2ind(vnLims, cFullRefs{:});
+   end
+   
+   % - Work out data size
+   vnDataSize = cellfun(@numel, cCheckedRefs);
+   
+   if (numel(vnDataSize) == 1)
+      vnDataSize(2) = 1;
+   end
+end
+
+function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
+   % - Find breaks
+   vnBreaks = [1 find(diff(vnLinearIndices) ~= 1) numel(vnLinearIndices)];
+  
+   % - Split indices into chunks
+   for (nBreak = numel(vnBreaks)-1:-1:1)
+      cvnFileChunkIndices{nBreak} = vnLinearIndices(vnBreaks(nBreak):vnBreaks(nBreak+1)); %#ok<AGROW>
+   end
+end
 % --- END of MappedTensor CLASS ---
