@@ -816,7 +816,7 @@ classdef MappedTensor < handle
             % - Are we attempting to re-size the tensor?
             if (~isequal(vnSliceSize([1:nSliceDim-1 nSliceDim+1:end]), vnTensorSize([1:nSliceDim-1 nSliceDim+1:end])))
                error('MappedTensor:IncorrectSliceDimensions', ...
-                  '*** MappedTensor/SliceFunction: A tensor cannot re resized during a slice operation.\n       Assign the output to a new tensor.');
+                  '*** MappedTensor/SliceFunction: A tensor cannot resized during a slice operation.\n       Assign the output to a new tensor.');
             end
          end
          
@@ -1038,11 +1038,11 @@ end
 
 function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
    % - Find breaks
-   vnBreaks = [1 find(diff(vnLinearIndices) ~= 1) numel(vnLinearIndices)];
+   vnBreaks = [0 find(diff(reshape(vnLinearIndices, 1, [])) ~= 1) numel(vnLinearIndices)];
   
    % - Split indices into chunks
    for (nBreak = numel(vnBreaks)-1:-1:1)
-      cvnFileChunkIndices{nBreak} = vnLinearIndices(vnBreaks(nBreak):vnBreaks(nBreak+1)); %#ok<AGROW>
+      cvnFileChunkIndices{nBreak} = vnLinearIndices(vnBreaks(nBreak)+1:vnBreaks(nBreak+1)); %#ok<AGROW>
    end
 end
 % --- END of MappedTensor CLASS ---
