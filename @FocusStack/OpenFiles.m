@@ -124,8 +124,9 @@ function OpenFocusStack(oStack, strFullFilePath, strFilenameOnly, nFile) %#ok<IN
    fclose(hFileHandle);
 
    % - Memory-map the file
-   oStack.vhMemMapFileHandles{nFile} = ...
-      memmapfile(oStack.cstrFilenames{nFile}, 'Format', {'uint8' [2 prod(oStack.vnFrameSize) oStack.vnNumFrames(nFile)] 'tfStack'}, 'Offset', 768);
+%    oStack.vhMemMapFileHandles{nFile} = ...
+%       memmapfile(oStack.cstrFilenames{nFile}, 'Format', {'uint8' [2 prod(oStack.vnFrameSize) oStack.vnNumFrames(nFile)] 'tfStack'}, 'Offset', 768);
+   oStack.vhMemMapFileHandles{nFile} = MappedTensor(oStack.cstrFilenames{nFile}, 2, prod(oStack.vnFrameSize), oStack.vnNumFrames(nFile), 'Class', 'uint8', 'HeaderBytes', 768);
 
    % - Two channels for focus files
    oStack.nNumChannels = 2;

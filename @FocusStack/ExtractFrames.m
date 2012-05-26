@@ -80,12 +80,15 @@ function tfData = ReadPixelsFromFile(oStack, nFileNumber, vnPixels, vnFrames, vn
 switch (class(oStack.vhMemMapFileHandles{nFileNumber}))
    case 'memmapfile'
       try
-      tfData = permute( oStack.vhMemMapFileHandles{nFileNumber}.Data.tfStack(vnChannels, vnPixels, vnFrames), ...
-         [3 1 2]);
+         tfData = permute(oStack.vhMemMapFileHandles{nFileNumber}.Data.tfStack(vnChannels, vnPixels, vnFrames), ...
+                          [3 1 2]);
       catch err
          disp('meh');
          rethrow(err);
       end
+
+   case 'MappedTensor'
+      tfData = permute(oStack.vhMemMapFileHandles{nFileNumber}(vnChannels, vnPixels, vnFrames), [3 1 2]);
 
    case 'TIFFStack'
       % - Get full frames

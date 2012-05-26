@@ -9,7 +9,8 @@
 %
 % Creation: mtVariable = MappedTensor(vnTensorSize)
 %           mtVariable = MappedTensor(nDim1, nDim2, nDim3, ...)
-%           mtVariable = MappedTensor(strExistingFilename, ...)
+%           mtVariable = MappedTensor(nSquareDim, ...)
+%           mtVariable = MappedTensor(strExistingFilename, <dimensions>, ...)
 %           mtVariable = MappedTensor(..., 'Class', strClassName)
 %           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
 %
@@ -20,9 +21,14 @@
 % must be known and specified in advance.  This file will not be removed when
 % all handle references are destroyed.
 %
+% If a single dimension is specified ('nSquareDim'), then the dimensions of
+% the resulting MappedTensor will be [nSquareDim nSquareDim].  This is in
+% line with Matlab default semantics for matrix construction.
+%
 % By default the tensor will have class 'double'.  This can be specified as an
-% argument to MappedTensor.  Supported classes: char, int8, uint8, logical,
-% int16, uint16, int32, uint32, single, int64, uint64, double.
+% argument to MappedTensor by specifiying the 'Class' argument (see usage
+% above). Supported classes: char, int8, uint8, logical, int16, uint16,
+% int32, uint32, single, int64, uint64, double.
 %
 % The optional parameter 'nHeaderBytesToSkip' allows you to skip over the
 % beginning of an (existing) binary file, by throwing away the specified
@@ -79,6 +85,11 @@
 %
 %           "Slice assign" operations can be performed by passing in a function
 %           than takes no input arguments for 'fhFunctionHandle'.
+%
+%           Note that due to Matlab not making available the number of
+%           return arguments that an anonymous function delivers, all
+%           functions passed to SliceFunction must return AT LEAST ONE
+%           argument.
 %
 %       For example:
 %
@@ -167,11 +178,7 @@ classdef MappedTensor < handle
          [mtVar.nClassSize, mtVar.strStorageClass] = ClassSize(mtVar.strClass);
          
          % - Do we need to cast data between these two classes?
-         if (~isequal(mtVar.strStorageClass, mtVar.strClass))
-            mtVar.bMustCast = true;
-         else
-            mtVar.bMustCast = false;
-         end
+         mtVar.bMustCast = ~isequal(mtVar.strStorageClass, mtVar.strClass);
 
          % - Should we map a file on disk, or create a temporary file?
          if (ischar(varargin{1}))
@@ -184,14 +191,22 @@ classdef MappedTensor < handle
             % - Create a temporary file
             mtVar.bTemporary = true;
             vnTensorSize = [varargin{:}];
-            
-            % - Make enough space for a tensor
+         end
+
+         % - If only one dimension was provided, assume the matrix is
+         % square (Matlab default semantics)
+         if (isscalar(vnTensorSize))
+            vnTensorSize = vnTensorSize * [1 1];
+         end
+                     
+         % - Make enough space for a temporary tensor
+         if (mtVar.bTemporary)
             mtVar.strRealFilename = CreateTempFile(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
          
          % - Open the file
          mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+');
-         
+                  
          % - Initialise dimension order
          mtVar.vnDimensionOrder = 1:numel(vnTensorSize);
          
@@ -234,7 +249,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% subsref - METHOD Overloaded subsref
+      %% Overloaded subsref, subsasg and end
       function [varargout] = subsref(mtVar, subs)
          % - More than one return argument means cell or dot referencing was
          % used
@@ -344,7 +359,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% subsasgn - METHOD Overloaded subsasgn
+      % subsasgn - METHOD Overloaded subsasgn
       function [mtVar] = subsasgn(mtVar, subs, tfData)
          % - Test real/complex nature of input and current tensor
          if (~isreal(tfData))
@@ -393,6 +408,16 @@ classdef MappedTensor < handle
          else
             % - Assign only real part
             mt_write_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor);
+         end
+      end
+      
+      % end - METHOD Overloaded end
+      function ind = end(obj,k,n)
+         szd = size(obj);
+         if k < n
+            ind = szd(k);
+         else
+            ind = prod(szd(k:end));
          end
       end
       
@@ -924,39 +949,56 @@ end
 
 %% Read / write functions
 
+% mt_read_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
 function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes)
    % - Check referencing and convert to linear indices
    [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
    
+   % - Maximise chunk probability and minimise number of reads by reading
+   % only sorted unique entries
+   [vnUniqueIndices, vnReverseSort] = unique(vnLinearIndices);
+   
    % - Split into readable chunks
-   cvnFileChunkIndices = SplitFileChunks(vnLinearIndices);
+   cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
    nNumChunks = numel(cvnFileChunkIndices);
    
    % - Allocate data
    [nClassSize, strStorageClass] = ClassSize(strClass);
    tData = zeros(vnDataSize, strStorageClass);
+   vUniqueData = zeros(numel(vnUniqueIndices), 1, strStorageClass);
    
    % - Read data in chunks
    nDataPointer = 1;
    for (nChunkIndex = 1:nNumChunks)
-      % - Seek file to beginning of chunk
-      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}(1)-1) * nClassSize + nHeaderBytes, 'bof');
+      % - Get chunk info
+      nChunkSkip = cvnFileChunkIndices{nChunkIndex}{2};
+      nChunkSize = cvnFileChunkIndices{nChunkIndex}{3};
       
-      % - Read chunk into return tensor
-      nChunkSize = numel(cvnFileChunkIndices{nChunkIndex});
-      tData(nDataPointer:nDataPointer+nChunkSize-1) = fread(hDataFile, nChunkSize, [strStorageClass '=>' strClass]);
+      % - Seek file to beginning of chunk
+      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}{1}-1) * nClassSize + nHeaderBytes, 'bof');
+      
+      % - Normal forward read
+      vUniqueData(nDataPointer:nDataPointer+nChunkSize-1) = fread(hDataFile, nChunkSize, [strStorageClass '=>' strClass], (nChunkSkip-1) * nClassSize);
       
       % - Shift to next data chunk
       nDataPointer = nDataPointer + nChunkSize;
    end
+   
+   % - Assign data back to original indexing order
+   tData(vnReverseSort) = vUniqueData;
 end
 
+% mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
 function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData)
    % - Check referencing and convert to linear indices
    [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
    
+   % - Maximise chunk probability and minimise number of writes by writing
+   % only sorted unique entries
+   [vnUniqueIndices, vnUniqueDataIndices] = unique(vnLinearIndices);
+
    % - Split into writable chunks
-   cvnFileChunkIndices = SplitFileChunks(vnLinearIndices);
+   cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
    nNumChunks = numel(cvnFileChunkIndices);
 
    % - Do we need to replicate the data?
@@ -969,23 +1011,29 @@ function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, t
             '*** MappedTensor: In an assignment A(I) = B, the number of elements in B and I must be the same.');
    end
    
+   % - Take only unique data indices
+   vUniqueData = tData(vnUniqueDataIndices);
+   
    % - Write data in chunks
    nDataPointer = 1;
    [nClassSize, strStorageClass] = ClassSize(strClass);
    for (nChunkIndex = 1:nNumChunks)
+      % - Get chunk info
+      nChunkSkip = cvnFileChunkIndices{nChunkIndex}{2};
+      nChunkSize = cvnFileChunkIndices{nChunkIndex}{3};
+
       % - Seek file to beginning of chunk
-      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}(1)-1) * nClassSize + nHeaderBytes, 'bof');
+      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}{1}-1) * nClassSize + nHeaderBytes, 'bof');
       
-      % - Write chunk
-      nChunkSize = numel(cvnFileChunkIndices{nChunkIndex});
-      fwrite(hDataFile, tData(nDataPointer:nDataPointer+nChunkSize-1), strStorageClass);
+      % - Normal forward write of chunk data
+      fwrite(hDataFile, vUniqueData(nDataPointer:nDataPointer+nChunkSize-1), strStorageClass, (nChunkSkip-1) * nClassSize);
       
       % - Shift to next data chunk
       nDataPointer = nDataPointer + nChunkSize;
    end
 end
 
-
+% ConvertColonCheckLims - FUNCTION Convert colon referencing to subscript indices; check index limits
 function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
    % - Handle linear indexing
    if (numel(cRefs) == 1)
@@ -1036,13 +1084,52 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
    end
 end
 
+% SplitFileChunks - FUNCTION Split a set of indices into contiguous chunks
+% (with a consistent skip step within a chunk)
 function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
-   % - Find breaks
-   vnBreaks = [0 find(diff(reshape(vnLinearIndices, 1, [])) ~= 1) numel(vnLinearIndices)];
-  
-   % - Split indices into chunks
-   for (nBreak = numel(vnBreaks)-1:-1:1)
-      cvnFileChunkIndices{nBreak} = vnLinearIndices(vnBreaks(nBreak)+1:vnBreaks(nBreak+1)); %#ok<AGROW>
+   % - Handle degenerate cases
+   switch (numel(vnLinearIndices))
+      case 1
+         % - Single element
+         cvnFileChunkIndices = {{vnLinearIndices, 1, 1}};
+         
+      case 2
+         % - Two elements
+         cvnFileChunkIndices = {{vnLinearIndices(1), vnLinearIndices(2) - vnLinearIndices(1), 2}};
+
+      otherwise
+         % - Get diffs
+         vnDiffs = [diff(reshape(vnLinearIndices, 1, [])) nan];
+         
+         nChunk = 1;
+         nIndex = 1;
+         % - Preallocate by estimating
+         nChunkAlloc = ceil(numel(vnLinearIndices)/2);
+         cvnFileChunkIndices = cell(nChunkAlloc, 1);
+         while (nIndex <= numel(vnLinearIndices))
+            nChunkLength = find(vnDiffs(nIndex:end) ~= vnDiffs(nIndex), 1, 'first');
+            
+            % - Fix up NaN skip
+            if (isnan(vnDiffs(nIndex)))
+               vnDiffs(nIndex) = 1;
+            end
+            
+            % - Define this chunk
+            cvnFileChunkIndices{nChunk} = {vnLinearIndices(nIndex) vnDiffs(nIndex) nChunkLength};
+            
+            % - Move to the next chunk; reallocate if necessary
+            nChunk = nChunk + 1;
+            if (nChunk > nChunkAlloc)
+               nChunkAlloc = nChunkAlloc*2;
+               cvnFileChunkIndices{nChunkAlloc} = [];
+            end
+            
+            % - Shift diffs array
+            nIndex = nIndex + nChunkLength;
+         end
+         
+         % - Trim chunks
+         cvnFileChunkIndices = cvnFileChunkIndices(1:nChunk-1);
    end
 end
 % --- END of MappedTensor CLASS ---
