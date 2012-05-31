@@ -73,15 +73,16 @@
 %
 %           'mtVar' is a MappedTensor.  This tensor will be sliced up along
 %           dimensions 'nSliceDim', with each slice passed individually to
-%           'fhFunctionHandle', along with any trailing argments (...).  If no
-%           return argument is supplied, the results will be stored back in
-%           'mtVar'.  If a return argument is supplied, a new MappedTensor will
-%           be created to contain the results.  The optional argument
-%           'vnSliceSize' can be used to call a function that returns a
-%           different sized output than the size of a single slice of 'mtVar'.
-%           In that case, a new tensor 'mtNewVar' will be generated, and it will
-%           have the size 'vnSliceSize', with the dimension 'nSliceDim' having
-%           the same length as in the original tensor 'mtVar'.
+%           'fhFunctionHandle', along with the slice index and any trailing
+%           argments (...).  If no return argument is supplied, the results
+%           will be stored back in 'mtVar'.  If a return argument is
+%           supplied, a new MappedTensor will be created to contain the
+%           results.  The optional argument 'vnSliceSize' can be used to
+%           call a function that returns a different sized output than the
+%           size of a single slice of 'mtVar'. In that case, a new tensorsl
+%           'mtNewVar' will be generated, and it will have the size
+%           'vnSliceSize', with the dimension 'nSliceDim' having the same
+%           length as in the original tensor 'mtVar'.
 %
 %           "Slice assign" operations can be performed by passing in a function
 %           than takes no input arguments for 'fhFunctionHandle'.
@@ -102,12 +103,12 @@
 %       Each slice of the third dimension of mtVar, taken in turn, is passed to
 %       fft2 and the result stored back into the same slice of mtVar.
 %
-%       mtVar2 = SliceFunction(mtVar, @fft2, 3);
+%       mtVar2 = SliceFunction(mtVar, @(x)(fft2(x)), 3);
 %
 %       This will return the result in a new MappedTensor, with temporary
 %       storage.
 %
-%       mtVar2 = SliceFunction(mtVar, @sum, 3, [1 10 1]);
+%       mtVar2 = SliceFunction(mtVar, @(x)(sum(x)), 3, [1 10 1]);
 %
 %       This will create a new MappedTensor with size [1 10 N], where 'N' is
 %       the length along dimension 3 of 'mtVar'.
@@ -115,6 +116,12 @@
 %       SliceFunction(mtVar, @()(randn(10, 10)), 3);
 %
 %       This will assign random numbers to each slice of 'mtVar' independently.
+%
+%       SliceFunction(mtVar, @(x, n)(x .* vfFactor(n)), 3);
+%
+%       The second argument to the function is passed the index of the
+%       current slice.  This line will multiply each slice in mtVar by a
+%       scalar corresponding to that slice index.
 
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 19th November, 2010
@@ -201,7 +208,7 @@ classdef MappedTensor < handle
                      
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
-            mtVar.strRealFilename = CreateTempFile(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
+            mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
          
          % - Open the file
@@ -366,29 +373,7 @@ classdef MappedTensor < handle
             % - The input data is complex
             
             if (~mtVar.bIsComplex)
-               % - The tensor is currently real only
-               % - Test to see if we can store complex values in the desired
-               % representation
-               switch (mtVar.strClass)
-                  case {'char', 'logical'}
-                     error('MappedTensor:NoConversionComplexToClass', ...
-                        '*** MappedTensor: Cannot assign complex values to a tensor of class %s.', mtVar.strClass);
-               end
-               
-               % - Create temporary storage for the complex part of the tensor
-               if (~mtVar.bTemporary)
-                  warning('MappedTensor:NoPermanentComplexStorage', ...
-                     '--- MappedTensor: Warning: The complex part of a tensor is always stored temporarily.');
-               end
-               
-               % - Make enough space for a tensor
-               mtVar.strCmplxFilename = CreateTempFile(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
-            
-               % - Open the file
-               mtVar.hCmplxContent = fopen(mtVar.strCmplxFilename, 'r+');
-               
-               % - Record that the tensor has a complex part
-               mtVar.bIsComplex = true;
+               make_complex(mtVar);
             end
          end
          
@@ -619,7 +604,7 @@ classdef MappedTensor < handle
          
          % - Find a dimension to slice along
          vnTensorSize = size(mtVar);
-         [nul, nSliceDim] = max(vnTensorSize);
+         nSliceDim = numel(vnTensorSize);
 
          % - Perform the addition slice-wise
          fhAddition = @(tSlice)(tSlice + fScalar);
@@ -649,7 +634,7 @@ classdef MappedTensor < handle
          
          % - Find a dimension to slice along
          vnTensorSize = size(mtVar);
-         [nul, nSliceDim] = max(vnTensorSize);
+         nSliceDim = numel(vnTensorSize);
 
          % - Perform the subtraction slice-wise
          if (vbIsScalar(1))
@@ -725,10 +710,6 @@ classdef MappedTensor < handle
          vnSumSize(nDim) = 1;
          vnSliceDimensions = cumprod(vnTensorSize);
          
-         % - Find which dimension to split over (ignoring sum dimension)
-         vnSplitDim = find(vnSliceDimensions >= nElementsInChunk, 2, 'first');
-         nSplitDim = vnSplitDim(find(vnSplitDim ~= nDim, 1, 'first'));
-         
          % - Compute the size of a single split
          vnSingleSplitSize = ceil(vnTensorSize ./ ceil(vnSliceDimensions ./ nElementsInChunk));
          
@@ -800,8 +781,14 @@ classdef MappedTensor < handle
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
-         % - Shall we generate a new tensor
+         % - Shall we generate a new tensor?
          bNewTensor = false;
+         
+         % - Check slice dimension
+         if ((nSliceDim < 1) || (nSliceDim > numel(vnTensorSize)))
+            error('MappedTensor:badsubscript', ...
+                  '*** MappedTensor: Index exceeds matrix dimensions.');
+         end
          
          % - Was the slice size explicity provided?
          if (~exist('vnSliceSize', 'var') || isempty(vnSliceSize))
@@ -837,6 +824,7 @@ classdef MappedTensor < handle
             % - Store the result back in the original tensor, taking advantage
             % of the handle property of a MappedTensor
             mtNewVar = mtVar;
+            vnNewTensorSize = size(mtVar);
             
             % - Are we attempting to re-size the tensor?
             if (~isequal(vnSliceSize([1:nSliceDim-1 nSliceDim+1:end]), vnTensorSize([1:nSliceDim-1 nSliceDim+1:end])))
@@ -845,23 +833,96 @@ classdef MappedTensor < handle
             end
          end
          
-         % - Create a referencing structure
-         sSubs = substruct('()', repmat({':'}, 1, numel(vnTensorSize)));
+         % - Create a referencing window
+         cvColons = repmat({':'}, 1, numel(vnTensorSize));
+         cvColons{nSliceDim} = 1;
+         [vnLinearSourceWindow, vnSourceDataSize] = ConvertColonsCheckLims(cvColons, vnTensorSize);
+         
+         cvTest = repmat({1}, 1, numel(vnTensorSize));
+         cvTest{nSliceDim} = 2;
+         nTestIndex = ConvertColonsCheckLims(cvTest, vnTensorSize);
+         nSourceWindowStep = nTestIndex - vnLinearSourceWindow(1);
+         
+         % - Split source window into readable chunks
+         cvnSourceChunkIndices = SplitFileChunks(vnLinearSourceWindow);
+
+         
+         if (bNewTensor)
+            cvColons = repmat({':'}, 1, numel(vnNewTensorSize));
+            cvColons{nSliceDim} = 1;
+            [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize);
+            
+            cvTest = repmat({1}, 1, numel(vnTensorSize));
+            cvTest{nSliceDim} = 2;
+            nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize);
+            nDestWindowStep = nTestIndex - vnLinearDestWindow(1);
+            
+            % - Split into readable chunks
+            cvnDestChunkIndices = SplitFileChunks(vnLinearDestWindow);
+         else
+            cvnDestChunkIndices = cvnSourceChunkIndices;
+            nDestWindowStep = nSourceWindowStep;
+            vnDestDataSize = vnSourceDataSize;
+         end
          
          % - Slice up along specified dimension
+         fprintf(1, '--- MappedTensor/SliceFunction: [%6.2f%%]', 0);
          for (nIndex = 1:vnTensorSize(nSliceDim))
-            % - Make referencing structure
-            sSubs.subs{nSliceDim} = nIndex;
+            % - Get chunks for this indexing window
+            cvnTheseSourceChunks = cellfun(@(c)(increment_chunk(c, (nIndex-1) * nSourceWindowStep)), cvnSourceChunkIndices, 'UniformOutput', false);
+            cvnTheseDestChunks = cellfun(@(c)(increment_chunk(c, (nIndex-1) * nDestWindowStep)), cvnDestChunkIndices, 'UniformOutput', false);
             
             % - Handle a "slice assign" function with no input arguments efficiently
             if (nargin(fhFunction) == 0)
-               subsasgn(mtNewVar, sSubs, fhFunction());
+               tData = fhFunction();
+               mt_write_data_chunks(mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor);
+               
             else
-               % - Execute function and store results
-               subsasgn(mtNewVar, sSubs, fhFunction(subsref(mtVar, sSubs), varargin{:}));
+               % - Read source data, multiply by real factor
+               tData = mt_read_data_chunks(mtVar.hRealContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes);
+               tData = tData .* mtVar.fRealFactor;
+               
+               % - Read complex part, if it exists
+               if (mtVar.bIsComplex)
+                  tDataCmplx = mt_read_data_chunks(mtVar.hCmplxContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes);
+                  tData = complex(tData, tDataCmplx .* mtVar.fComplexFactor);
+               end
+               
+               % - Reshape source data
+               tData = reshape(tData, vnSourceDataSize);
+               
+               % - Call function
+               if (nargin(fhFunction) > 1)
+                  tData = fhFunction(tData, nIndex, varargin{:});
+               else
+                  tData = fhFunction(tData, varargin{:});
+               end
+               
+               % - Write results
+               if (~isreal(tData))
+                  if (~mtNewVar.bIsComplex)
+                     make_complex(mtNewVar);
+                  end
+                     
+                  % - Write real and complex parts
+                  mt_write_data_chunks(mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, real(tData) ./ mtVar.fRealFactor);
+                  mt_write_data_chunks(mtNewVar.hCmplxContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, imag(tData) ./ mtVar.fComplexFactor);
+               else
+                  % - Write real part
+                  mt_write_data_chunks(mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor);
+               end
             end
+            
+            fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]', nIndex / vnTensorSize(nSliceDim) * 100);
+         end
+         fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]\n', 100);
+
+         % increment_chunk - helper function
+         function c = increment_chunk(c, nIncrement)
+            c{1} = c{1} + nIncrement;
          end
       end
+      
       
       %% saveobj - METHOD Overloaded save mechanism
       function [sVar] = saveobj(mtVar)
@@ -900,11 +961,99 @@ classdef MappedTensor < handle
             '--- MappedTensor: Warning: Saving and loaded MappedTensor objects does not preserve object data!');
       end
    end
+   
+   methods (Access = protected)
+      %% make_complex - PROTECTED METHOD Convert tensor to complex stora
+      function make_complex(mtVar)
+         % - test to see if we can store complex values in the desired
+         % representation
+         switch (mtVar.strClass)
+            case {'char', 'logical'}
+               error('MappedTensor:NoConversionComplexToClass', ...
+                  '*** MappedTensor: Cannot assign complex values to a tensor of class %s.', mtVar.strClass);
+         end
+         
+         % - create temporary storage for the complex part of the tensor
+         if (~mtVar.bTemporary)
+            warning('MappedTensor:NoPermanentComplexStorage', ...
+               '--- MappedTensor: Warning: The complex part of a tensor is always stored temporarily.');
+         end
+         
+         % - make enough space for a tensor
+         mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
+         
+         % - open the file
+         mtVar.hCmplxContent = fopen(mtVar.strCmplxFilename, 'r+');
+         
+         % - record that the tensor has a complex part
+         mtVar.bIsComplex = true;
+      end
+   end
+   
+   %% Class conversion methods
+   % - Beware; these methods will allocate the whole tensor!
+   methods
+      function tfData = char(mtVar)
+         tfData = cast(mtVar, 'char');
+      end
+      
+      function tfData = int8(mtVar)
+         tfData = cast(mtVar, 'int8');
+      end
+      
+      function tfData = uint8(mtVar)
+         tfData = cast(mtVar, 'uint8');
+      end
+      
+      function tfData = logical(mtVar)
+         tfData = cast(mtVar, 'logical');
+      end
+      
+      function tfData = int16(mtVar)
+         tfData = cast(mtVar, 'int16');
+      end
+      
+      function tfData = uint16(mtVar)
+         tfData = cast(mtVar, 'uint16');
+      end
+
+      function tfData = int32(mtVar)
+         tfData = cast(mtVar, 'int32');
+      end
+
+      function tfData = uint32(mtVar)
+         tfData = cast(mtVar, 'uint32');
+      end
+      
+      function tfData = single(mtVar)
+         tfData = cast(mtVar, 'single');
+      end
+      
+      function tfData = int64(mtVar)
+         tfData = cast(mtVar, 'int64');
+      end
+      
+      function tfData = uint64(mtVar)
+         tfData = cast(mtVar, 'uint64');
+      end
+      
+      function tfData = double(mtVar)
+         tfData = cast(mtVar, 'double');
+      end
+      
+      function tfData = cast(mtVar, strClass)
+         warning('MappedTensor:WholeTensor', ...
+                 '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
+              
+         sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
+         tfData = builtin('cast', subsref(mtVar, sSubs), strClass);
+      end
+   end
 end
 
 %% --- Helper functions ---
 
-function strFilename = CreateTempFile(nNumEntries)
+function strFilename = create_temp_file(nNumEntries)
    % - Get the name of a temporary file
    strFilename = tempname;
    
@@ -960,12 +1109,37 @@ function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeade
    
    % - Split into readable chunks
    cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
+
+   % - Call read function
+   tData = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes);
+end
+
+% mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
+function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData)
+   % - Check referencing and convert to linear indices
+   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
+   
+   % - Maximise chunk probability and minimise number of writes by writing
+   % only sorted unique entries
+   [vnUniqueIndices, vnUniqueDataIndices] = unique(vnLinearIndices);
+
+   % - Split into readable chunks
+   cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);   
+   
+   % - Call writing function
+   mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
+end
+
+% mt_read_data_unchecked - FUNCTION Read data without sorting or checking indices
+% 'vnUniqueIndices' MUST be sorted and unique; 'vnReverseSort' must be the
+% inverting indices from calling UNIQUE
+function [tData] = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes)
    nNumChunks = numel(cvnFileChunkIndices);
    
    % - Allocate data
    [nClassSize, strStorageClass] = ClassSize(strClass);
    tData = zeros(vnDataSize, strStorageClass);
-   vUniqueData = zeros(numel(vnUniqueIndices), 1, strStorageClass);
+   vUniqueData = zeros(numel(vnReverseSort), 1, strStorageClass);
    
    % - Read data in chunks
    nDataPointer = 1;
@@ -988,17 +1162,10 @@ function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeade
    tData(vnReverseSort) = vUniqueData;
 end
 
-% mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData)
-   % - Check referencing and convert to linear indices
-   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
-   
-   % - Maximise chunk probability and minimise number of writes by writing
-   % only sorted unique entries
-   [vnUniqueIndices, vnUniqueDataIndices] = unique(vnLinearIndices);
-
-   % - Split into writable chunks
-   cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
+% mt_write_data_unchecked - FUNCTION Write data without sorting or checking indices
+% 'vnUniqueIndices' MUST be sorted and unique; 'vnUniqueDataIndices' must
+% be the corresponding indices into the data from calling UNIQUE
+function mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
    nNumChunks = numel(cvnFileChunkIndices);
 
    % - Do we need to replicate the data?
@@ -1044,7 +1211,7 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
    for (nRefDim = numel(cRefs):-1:1) %#ok<FORPF>
       % - Convert colon references
       if (ischar(cRefs{nRefDim}) && isequal(cRefs{nRefDim}, ':'))
-         cCheckedRefs{nRefDim} = 1:vnLims(nRefDim); %#ok<AGROW>
+         cCheckedRefs{nRefDim} = 1:vnLims(nRefDim);
          
       elseif (islogical(cRefs{nRefDim}))
          % - Logical referencing -- convert to indexed referencing
@@ -1054,7 +1221,7 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
                '*** FocusStack/GetFullFileRefs: Logical referencing for dimension [%d] was out of bounds [1..%d].', ...
                nRefDim, vnLims(nRefDim));
          end
-         cCheckedRefs{nRefDim} = vnIndices; %#ok<AGROW>
+         cCheckedRefs{nRefDim} = vnIndices;
          
       elseif (any(cRefs{nRefDim}(:) < 1) || any(cRefs{nRefDim}(:) > vnLims(nRefDim)))
          % - Check limits
@@ -1064,7 +1231,7 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
          
       else
          % - This dimension was ok
-         cCheckedRefs{nRefDim} = cRefs{nRefDim}(:); %#ok<AGROW>
+         cCheckedRefs{nRefDim} = cRefs{nRefDim}(:);
       end
    end
    
@@ -1132,4 +1299,5 @@ function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
          cvnFileChunkIndices = cvnFileChunkIndices(1:nChunk-1);
    end
 end
+
 % --- END of MappedTensor CLASS ---
