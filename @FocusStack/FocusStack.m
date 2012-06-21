@@ -26,6 +26,7 @@ classdef FocusStack < handle
       cmfBlankFrames = {};
       mnAssignedBlankMeanFrames = [];
       mnAssignedBlankStdFrames = [];
+      bAssignedStimulusIDs = false;
       bAssignedSequenceIDs = false;
       bAssignedStimStartTimes = false;
       bAssignedStimEndTimes = false;
@@ -33,7 +34,6 @@ classdef FocusStack < handle
    end
 
    properties (Dependent = true, SetAccess = private)
-      vnStimulusIDs;
       tBlankTime;
       nNumStimuli;
    end
@@ -42,6 +42,7 @@ classdef FocusStack < handle
       fPixelsPerUM = [];
       tFrameDuration = [];
       fZStep = [];
+      vnStimulusIDs = [];
       cvnSequenceIDs = {};
       vtStimulusDurations = [];
       vtStimulusStartTimes = [];
@@ -173,11 +174,6 @@ classdef FocusStack < handle
          oStack.bSubtractBlack = true; %#ok<MCSUP>
       end
       
-      % get.vnStimulusIDs - GETTER for 'vnStimulusIDs'
-      function [vnStimulusIDs] = get.vnStimulusIDs(oStack)
-         vnStimulusIDs = [oStack.vsHeaders.nStimulusID];
-      end
-      
       % get.fBlankTime - GETTER for 'tBlankTime'
       function [tBlankTime] = get.tBlankTime(oStack)
          vtBlankTimes = [oStack.vsHeaders.tBlankTime];
@@ -186,6 +182,30 @@ classdef FocusStack < handle
             tBlankTime = vtBlankTimes(1);
          else
             tBlankTime = vtBlankTimes;
+         end
+      end
+      
+      % set.vnStimulusIDs - SETTER for 'vnStimulusIDs'
+      function set.vnStimulusIDs(oStack, vnStimulusIDs)
+         if (~isnumeric(vnStimulusIDs) || (numel(vnStimulusIDs) ~= numel(oStack.cstrFilenames))) %#ok<MCSUP>
+            error('FocusStack:InvalidArgument', ...
+               '*** FocusStack/set.vnStimulusIDs: ''vnStimulusIDs'' must be a numeric vector with [%d] element(s) for this stack.', ...
+               numel(oStack.cstrFilenames)); %#ok<MCSUP>
+         end
+         
+         % - Assign vnStimulusIDs
+         oStack.vnStimulusIDs = vnStimulusIDs;
+         oStack.bAssignedStimulusIDs = true; %#ok<MCSUP>
+      end
+      
+      % get.vnStimulusIDs - GETTER for 'vnStimulusIDs'
+      function [vnStimulusIDs] = get.vnStimulusIDs(oStack)
+         if (oStack.bAssignedStimulusIDs)
+            vnStimulusIDs = oStack.vnStimulusIDs;
+            
+         else
+            % - Load them from the block headers
+            vnStimulusIDs = [oStack.vsHeaders.nStimulusID];
          end
       end
       
