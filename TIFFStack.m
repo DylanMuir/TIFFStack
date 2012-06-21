@@ -88,7 +88,7 @@ classdef TIFFStack < handle
          oStack.strFilename = get_full_file_path(strFilename);
          
          % - Get image information
-         try
+%          try
             % - Read and save image information
             sInfo = imfinfo(strFilename);
             oStack.sImageInfo = sInfo;
@@ -106,14 +106,14 @@ classdef TIFFStack < handle
             oStack.strDataClass = class(fPixel);
 
             % - Record stack size
-            oStack.vnStackSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) numel(fPixel)];
+            oStack.vnStackSize = [sInfo(1).Width sInfo(1).Height numel(sInfo) numel(fPixel)];
             
-         catch mErr
-            base_ME = MException('TIFFStack:InvalidFile', ...
-                  '*** TIFFStack: Could not open file [%s].', strFilename);
-            new_ME = addCause(base_ME, mErr);
-            throw(new_ME);
-         end
+%          catch mErr
+%             base_ME = MException('TIFFStack:InvalidFile', ...
+%                   '*** TIFFStack: Could not open file [%s].', strFilename);
+%             new_ME = addCause(base_ME, mErr);
+%             throw(new_ME);
+%          end
       end
       
       % delete - DESTRUCTOR
