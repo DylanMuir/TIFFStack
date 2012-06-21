@@ -13,13 +13,13 @@ for (nROIIndex = numel(cvsROIs):-1:1)
       case 'rectangle'
          if (isfield(sThisROI, 'strSubtype') && isequal(lower(sThisROI.strSubtype), 'shape'))
             % - Skip this one
-            break;
+            continue;
             
          else
             % - Make a rectangular mask
             mbThisMask = false(vnImageSize);
             mbThisMask(sThisROI.vnRectBounds(2):sThisROI.vnRectBounds(4), sThisROI.vnRectBounds(1):sThisROI.vnRectBounds(3)) = true;
-            Regions.PixelIdxList{nROIIndex} = find(mbThisMask);
+            sRegions.PixelIdxList{nROIIndex} = find(mbThisMask);
          end
          
       case 'oval'
