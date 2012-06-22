@@ -118,8 +118,9 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 %
 % 20110810 Bug report contributed by Jean-Yves Tinevez
 % 20110829 Bug fix contributed by Benjamin Ricca <ricca@berkeley.edu>
+% 20120622 Order of ROIs in a ROI set is now preserved
 %
-% Copyright (c) 2011 Dylan Muir <muir@hifo.uzh.ch>
+% Copyright (c) 2011, 2012 Dylan Muir <muir@hifo.uzh.ch>
 %
 % This program is free software; you can redistribute it and/or
 % modify it under the terms of the GNU General Public License
@@ -163,15 +164,10 @@ end
 if (isequal(lower(strExt), '.zip'))
    % - Unzip the file into a temporary directory
    strROIDir = tempname;
-   unzip(strFilename, strROIDir);
+   cstrFilenames = unzip(strFilename, strROIDir);
    
-   % - Build ROIs from all ROI files
-   vsROIFiles = dir([strROIDir filesep '*.roi']);
-   
-   % - Build a cell array of strings
-   for (nFileIndex = numel(vsROIFiles):-1:1)
-      cstrFilenames{nFileIndex} = [strROIDir filesep vsROIFiles(nFileIndex).name]; %#ok<AGROW>
-   end
+   % - Reverse order of ROIs
+   cstrFilenames = cstrFilenames(end:-1:1);
    
    % - Build ROIs for each file
    cvsROIs = ReadImageJROI(cstrFilenames);
