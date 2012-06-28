@@ -1,9 +1,9 @@
-function [mfBlankFrame] = AssignBlankFrame(oStack, mfBlankFrame, vnStackFrames)
+function [mfBlankFrame] = AssignBlankFrame(oStack, mfBlankFrame, vnStackFrames, vnChannels)
 
 % AssignBlankFrame - METHOD Assign a blank frame to a stretch of stack frames, for use in DFF conversion
 %
-% Usage: AssignBlankFrame(oStack, mfBlankFrame <, vnStackFrames>)
-%        AssignBlankFrame(oStack, tfBlankFrame <, vnStackFrames>)
+% Usage: AssignBlankFrame(oStack, mfBlankFrame <, vnStackFrames, vnChannels>)
+%        AssignBlankFrame(oStack, tfBlankFrame <, vnStackFrames, vnChannels>)
 %
 % Asign a blank frame (with an optional standard deviation frame) to a set
 % of frames in a stack.  If 'tfBlankFrame' is supplied as an [NxMx2]
@@ -27,6 +27,10 @@ if (~exist('vnStackFrames', 'var') || isempty(vnStackFrames))
    vnStackFrames = 1:vnStackSize(3);
 end
 
+if (~exist('vnChannels', 'var') || isempty(vnChannels))
+   vnChannels = 1;
+end
+
 % - Convert to numerical indexing
 if (islogical(vnStackFrames))
    vnStackFrames = find(vnStackFrames);
@@ -34,10 +38,13 @@ end
 
 if (any(vnStackFrames(:) < 1) || any(vnStackFrames(:) > vnStackSize(3)))
    error('FocusStack:BadStackFrameID', ...
-      '*** FocusStack/AssignBlankFrame: ''vnStackFrames'' must be limited to [1 %d] for this stack.', vnStackSize(3));
+      '*** FocusStack/AssignBlankFrame: ''vnStackFrames'' must be limited to [1..%d] for this stack.', vnStackSize(3));
 end   
 
-nChannel = 1;
+if (any(vnChannels(:) < 1) || any(vnChannels(:) > vnStackSize(4)))
+   error('FocusStack:BadChannelID', ...
+      '*** FocusStack/AssignBlankFrame: ''vnChannels'' must be limited to [1..%d] for this stack.', vnStackSize(4));
+end
 
 if (size(mfBlankFrame, 3) > 1)
    mfStdFrame = mfBlankFrame(:, :, 2);
@@ -70,7 +77,7 @@ end
 
 % - Assign blank mean frame and associate with stack frames
 oStack.cmfBlankFrames{nBlankFrameID} = double(mfBlankFrame);
-oStack.mnAssignedBlankMeanFrames(vnStackFrames(:), nChannel) = nBlankFrameID;
+oStack.mnAssignedBlankMeanFrames(vnStackFrames(:), vnChannels(:)) = nBlankFrameID;
 
 % - Filter and assign blank standard deviation frame, if it exists
 if (exist('mfStdFrame', 'var'))
@@ -83,7 +90,7 @@ if (exist('mfStdFrame', 'var'))
    end
    
    oStack.cmfBlankFrames{nBlankFrameID+1} = double(mfStdFrame);
-   oStack.mnAssignedBlankStdFrames(vnStackFrames(:), nChannel) = nBlankFrameID+1;
+   oStack.mnAssignedBlankStdFrames(vnStackFrames(:), vnChannels(:)) = nBlankFrameID+1;
 end
 
 % --- END of AssignBlankFrame.m ---
