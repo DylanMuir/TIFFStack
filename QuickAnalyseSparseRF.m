@@ -23,11 +23,6 @@ DEF_bAssignBlack = false;
 DEF_bAssignBlank = false;
 DEF_mfCustomAlignment = 10;
 DEF_bOrderROIs = true;
-DEF_fhExtractionFunction = ExtractMean(1, bAssignBlank);
-
-if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
-   fhExtractionFunction = DEF_fhExtractionFunction;
-end
 
 %% -- Check arguments, assign defaules
 
@@ -57,6 +52,11 @@ if (~exist('bOrderROIs', 'var') || isempty(bOrderROIs))
    bOrderROIs = DEF_bOrderROIs;
 end
 
+DEF_fhExtractionFunction = ExtractMean(1, bAssignBlank);
+if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
+   fhExtractionFunction = DEF_fhExtractionFunction;
+end
+
 
 %% -- Generate a consistent "temporary" filename
 
@@ -70,7 +70,7 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
 
 %% -- Try to make a focus stack
 
-try
+% try
    % - Construct a stack
    disp('--- QuickAnalyseSparseRF: Creating FocusStack...');
    fsStack = FocusStack(cstrFilenames);
@@ -126,14 +126,14 @@ try
       AssignBlank(fsStack, fhExtractionFunction);
    end
    
-catch meErr
-   % - Try to save the stack, if possible
-   if (exist('fsStack', 'var'))
-      save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
-   end
-   
-   rethrow(meErr);
-end
+% catch meErr
+%    - Try to save the stack, if possible
+%    if (exist('fsStack', 'var'))
+%       save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
+%    end
+%    
+%    rethrow(meErr);
+% end
 
 fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
 % fsStack.fPixelsPerUM = 5;

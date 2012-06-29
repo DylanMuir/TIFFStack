@@ -46,6 +46,15 @@ cSubs{end+1} = 1;
 
 bGetStds = nargout > 1;
 
+if (prod(vnDataSize) == 0)
+    tfBlankMean = ones(vnDataSize);
+
+    if (bGetStds)
+        tfBlankStd = ones(vnDataSize);
+    end
+    
+    return;
+end
 
 % -- Extract unique blank frames
 
