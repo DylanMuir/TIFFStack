@@ -17,9 +17,15 @@ bConvertToDFF = oStack.bConvertToDFF;
 oStack.bConvertToDFF = false;
 
 if (~exist('vnBlackPixels', 'var') || isempty(vnBlackPixels))
+   % - Try to average frames 2:11
+   vnFrameWindow = 2:(min(11, size(oStack, 3)));
+   if (isempty(vnFrameWindow))
+      vnFrameWindow = 1;
+   end
+   
    % - Display the first stack frame
    hFigure = figure;
-   imagesc(ExtractAlignedFrames(oStack, {':', ':', 1, nChannel})');
+   imagesc(nanmean(ExtractAlignedFrames(oStack, {':', ':', vnFrameWindow, nChannel}), 3)');
    colormap gray;
    axis equal tight off;
    
