@@ -88,7 +88,9 @@ switch (class(oStack.vhMemMapFileHandles{nFileNumber}))
       end
 
    case 'MappedTensor'
-      tfData = permute(oStack.vhMemMapFileHandles{nFileNumber}(vnChannels, vnPixels, vnFrames), [3 1 2]);
+      % - Get full frames and subsample
+      tfData = permute(oStack.vhMemMapFileHandles{nFileNumber}(vnChannels, :, vnFrames), [3 1 2]);
+      tfData = tfData(:, :, vnPixels);
 
    case 'TIFFStack'
       % - Get full frames

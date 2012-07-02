@@ -72,7 +72,14 @@ for (nChannel = vnChannels(:)')
    end
    
    % - Normalise frame within mask
-   if (~isa(mfThisFrame, 'uint8'))
+   if (isa(mfThisFrame, 'uint8'))
+      % - Dont normalise
+      
+   elseif (isa(mfThisFrame, 'uint16'))
+      % - Scale to [0..255]
+      mfThisFrame = uint8(double(mfThisFrame) / 256);
+      
+   else
       mfThisFrame = double(mfThisFrame) - min(double(mfThisFrame(mbDataMask)));
       mfThisFrame = uint8(mfThisFrame ./ max(mfThisFrame(mbDataMask)) * 255);
       mfThisFrame(~mbDataMask) = 0;

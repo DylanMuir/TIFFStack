@@ -1,8 +1,8 @@
-% ConvertHelioscanHeader - PRIVATE FUNCTION Convert an XML header to Focus header structure format
+% ConvertXMLHeader - PRIVATE FUNCTION Convert an XML header to Focus header structure format
 %
-% Usage: [sHeader] = ConvertHelioscanHeader(strHeaderXML)
+% Usage: [sHeader] = ConvertXMLHeader(strHeaderXML)
 
-function [sHeader] = ConvertHelioscanHeader(strHeaderXML)
+function [sHeader] = ConvertXMLHeader(strHeaderXML)
 
 % - Build a document model from the XML
 SBISstream = java.io.StringBufferInputStream(strHeaderXML);
@@ -19,28 +19,22 @@ fDateNum = datenum(sHSHeader.OME.Image.AcquiredDate.Child_1.Data, 'yyyy-mm-ddTHH
 sHeader.strDate = datestr(fDateNum, 'yyyy-mm-dd');
 sHeader.strTime = datestr(fDateNum, 'HH:MM:SS');
 
-sPixels = sHSHeader.OME.Image.Pixels;
+sBasePath = sHSHeader.OME.Image.StructuredAnnotations.XmlStringAnnotation.HelioScan;
 
-sHeader.vnFrameSizePixels = [str2double(sPixels.SizeX) str2double(sPixels.SizeY)];
-sHeader.nNumFrames = str2double(sPixels.SizeT) * str2double(sPixels.SizeZ);
+sHeader.vnFrameSizePixels = [str2double(sBasePath.ImagingMode.settings.FrameSettings.ResolutionX.Child_1.Data)...
+    str2double(sBasePath.ImagingMode.settings.FrameSettings.ResolutionY.Child_1.Data)];
+sHeader.nNumFrames = str2double(sBasePath.ImagingMode.settings.StackSettings.Frames.Child_1.Data);
+sHeader.tLineScanTime_ms = (1 / str2double(sBasePath.Trajectory.configuration_data.resonance_frequency.Child_1.Data) * 1e3);
+sHeader.vfXYZStep_nm = [0 0 str2double(sBasePath.ImagingMode.settings.StackSettings.StepSize.Child_1.Data)];
+sHeader.fZoomFactor = str2double(sBasePath.ScanHead.settings.Zoom.Child_1.Data);
+sHeader.tFrameDuration = 1 / str2double(sBasePath.ImagingMode.settings.FrameSettings.FrameScanRate.Child_1.Data);
+sHeader.vfFieldOfView = [str2double(sBasePath.Trajectory.configuration_data.FOVx.Child_1.Data) ...
+    str2double(sBasePath.Trajectory.configuration_data.FOVy.Child_1.Data)];
 
-if (isfield(sHeader, 'tLineScanTime_ms'))
-   sHeader.tLineScanTime_ms = (str2double(sPixels.TimeIncrement) * 1e3) / str2double(sPixels.SizeY);
-else
-   sHeader.tLineScanTime_ms = (1 / str2double(...
-      sHSHeader.OME.Image.StructuredAnnotations.XmlStringAnnotation.HelioScan.ImagingMode.settings.FrameSettings.FrameScanRate.Child_1.Data) ...
-      * 1e3) / str2double(sPixels.SizeY);
-end      
-
-sHeader.vfXYZStep_nm = [0 0 0];
-
-sHeader.fZoomFactor = 117 / (str2double(sPixels.PhysicalSizeX));
-
-if (isfield(sHSHeader.OME.Image.StructuredAnnotations.XmlStringAnnotation.HelioScan.Stimulator, 'settings'))
-   strTCPSignalPath = sHSHeader.OME.Image.StructuredAnnotations.XmlStringAnnotation.HelioScan.Stimulator.settings.TCP_signal.Child_1.Data;
+if (isfield(sBasePath.Stimulator.settings.TCP_signal, 'Child_1'))
+   strTCPSignalPath = sBasePath.Stimulator.settings.TCP_signal.Child_1.Data;
    sHeader.vnSequenceIDs = eval(strTCPSignalPath(strfind(strTCPSignalPath,'['):strfind(strTCPSignalPath,']')));
    sHeader.nSequenceLength = numel(sHeader.vnSequenceIDs);
-   
    sHeader.nStimulusID = sscanf(strTCPSignalPath, 'SS PRESENT %d');
 else
    sHeader.vnSequenceIDs = [];
