@@ -256,7 +256,9 @@ function OpenBinStack(oStack, strFullPath, strFilenameOnly, nFile)
 
    % - Construct BinStack
 %    oStack.vhMemMapFileHandles{nFile} = MappedTensor(oStack.cstrFilenames{nFile}, prod(oStack.vsHeaders.vnFrameSizePixels), oStack.vsHeaders.nNumFrames, 'Class', 'uint16');
-   oStack.vhMemMapFileHandles{nFile} = MappedTensor(oStack.cstrFilenames{nFile}, [1 prod(oStack.vsHeaders.vnFrameSizePixels) oStack.vsHeaders.nNumFrames], 'Class', 'uint16');
+   oStack.vhMemMapFileHandles{nFile} = ...
+      MappedTensor(  oStack.cstrFilenames{nFile}, [1 prod(oStack.vsHeaders.vnFrameSizePixels) oStack.vsHeaders.nNumFrames], ...
+                     'Class', 'uint16', 'MachineFormat', 'ieee-be.l64');
 %    oStack.vhMemMapFileHandles{nFile} = MappedTensor(oStack.cstrFilenames{nFile}, 1, prod(oStack.vsHeaders.vnFrameSizePixels), oStack.vsHeaders.nNumFrames, 'Class', 'uint16');
 
    % - Check that this stack is compatible with previous stack sizes (frame

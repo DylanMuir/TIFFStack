@@ -224,7 +224,7 @@ classdef MappedTensor < handle
             mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+');
             [nul, nul, mtVar.strMachineFormat] = fopen(mtVar.hRealContent);
          else
-            mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+', 'MachineFormat', mtVar.strMachineFormat);
+            mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+', mtVar.strMachineFormat);
          end
                   
          % - Initialise dimension order
