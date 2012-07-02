@@ -1,11 +1,31 @@
-% FocusStack - CLASSDEF Contains memory-mapped two-photon stacks on disk
+% FocusStack - CLASSDEF Manipulate memory-mapped two-photon stacks on disk
 %
 % To construct a FocusStack object:
 %    fsStack = FocusStack(cstrFilenames, bWritable)
+%
+% To extract frames:
+%    fsStack(:, :, vnFrames, vnChannels);
+%    fsStack(vnPixels, vnFrames, vnChannels);
+%    fsStack.AlignedFrames(:, :, :, :)
+%    fsStack.RawStack(:, :, :, :);
+%
+% To accumulate over the stack:
+%    fsStack.SummedFrames(:, :, :, :);
+%    fsStack.SummedAlignedFrames(:, :, :, :);
+%    fsStack.MeanPixels(:, :, :, :);
+%
+% To assign blank frames:
+%    fsStack.<a href="matlab:help AssignBlankFrame">AssignBlankFrame</a>(...)
+%
+% <a href="matlab:methods('FocusStack')">List methods</a>, <a href="matlab:properties('FocusStack')">properties</a>
+% 
+
+% Author: Dylan Muir <muir@hifo.uzh.ch>
+% Created: 2010
 
 classdef FocusStack < handle
    properties (SetAccess = private)
-      % bWritable - Can we write back to the file no disk?
+      % bWritable - Can we write back to the file on disk?
       bWritable = false;
       cstrFilenames = {};
       bConvertToDFF = false;
@@ -26,6 +46,7 @@ classdef FocusStack < handle
       cmfBlankFrames = {};
       mnAssignedBlankMeanFrames = [];
       mnAssignedBlankStdFrames = [];
+      bAssignedStimulusIDs = false;
       bAssignedSequenceIDs = false;
       bAssignedStimStartTimes = false;
       bAssignedStimEndTimes = false;
@@ -33,7 +54,6 @@ classdef FocusStack < handle
    end
 
    properties (Dependent = true, SetAccess = private)
-      vnStimulusIDs;
       tBlankTime;
       nNumStimuli;
    end
@@ -42,6 +62,7 @@ classdef FocusStack < handle
       fPixelsPerUM = [];
       tFrameDuration = [];
       fZStep = [];
+      vnStimulusIDs = [];
       cvnSequenceIDs = {};
       vtStimulusDurations = [];
       vtStimulusStartTimes = [];
@@ -173,11 +194,6 @@ classdef FocusStack < handle
          oStack.bSubtractBlack = true; %#ok<MCSUP>
       end
       
-      % get.vnStimulusIDs - GETTER for 'vnStimulusIDs'
-      function [vnStimulusIDs] = get.vnStimulusIDs(oStack)
-         vnStimulusIDs = [oStack.vsHeaders.nStimulusID];
-      end
-      
       % get.fBlankTime - GETTER for 'tBlankTime'
       function [tBlankTime] = get.tBlankTime(oStack)
          vtBlankTimes = [oStack.vsHeaders.tBlankTime];
@@ -186,6 +202,30 @@ classdef FocusStack < handle
             tBlankTime = vtBlankTimes(1);
          else
             tBlankTime = vtBlankTimes;
+         end
+      end
+      
+      % set.vnStimulusIDs - SETTER for 'vnStimulusIDs'
+      function set.vnStimulusIDs(oStack, vnStimulusIDs)
+         if (~isnumeric(vnStimulusIDs) || (numel(vnStimulusIDs) ~= numel(oStack.cstrFilenames))) %#ok<MCSUP>
+            error('FocusStack:InvalidArgument', ...
+               '*** FocusStack/set.vnStimulusIDs: ''vnStimulusIDs'' must be a numeric vector with [%d] element(s) for this stack.', ...
+               numel(oStack.cstrFilenames)); %#ok<MCSUP>
+         end
+         
+         % - Assign vnStimulusIDs
+         oStack.vnStimulusIDs = vnStimulusIDs;
+         oStack.bAssignedStimulusIDs = true; %#ok<MCSUP>
+      end
+      
+      % get.vnStimulusIDs - GETTER for 'vnStimulusIDs'
+      function [vnStimulusIDs] = get.vnStimulusIDs(oStack)
+         if (oStack.bAssignedStimulusIDs)
+            vnStimulusIDs = oStack.vnStimulusIDs;
+            
+         else
+            % - Load them from the block headers
+            vnStimulusIDs = [oStack.vsHeaders.nStimulusID];
          end
       end
       
@@ -371,6 +411,149 @@ classdef FocusStack < handle
       end
       
 
+%% --- disp - METHOD Overloaded disp function
+      function disp(fsData)
+         strVarName = inputname(1);
+         dp = @(p, varargin)(disp_property(strVarName, p, varargin{:}));
+         
+         strSize = strtrim(sprintf(' %d', size(fsData)));
+         disp(sprintf('  <a href="matlab:help FocusStack">FocusStack</a> object, class [%s], dimensions [%s].', fsData.strDataClass, strSize)); %#ok<DSPS>
+
+         fprintf('\n');
+         disp('  Stack properties:');
+         
+         dp('cstrFilenames', '{%d file(s)}', numel(fsData.cstrFilenames));
+         
+         if (fsData.bWritable)
+            strWritable = 'true (writable)';
+         else
+            strWritable = 'false (read-only)';
+         end
+         dp('bWritable', strWritable);
+         
+         if (~isempty(fsData.mfFrameShifts))
+            strFrameShifts = '(alignment present)';
+         else
+            strFrameShifts = '(unaligned)';
+         end
+         dp('mfFrameShifts', strFrameShifts);
+
+         dp('fPixelsPerUM', '%.4f (%.2f um per pixel)', fsData.fPixelsPerUM, 1/fsData.fPixelsPerUM);
+         dp('tFrameDuration', '%.4f (%.2f Hz)', fsData.tFrameDuration, 1/fsData.tFrameDuration);
+         dp('fZStep', '%.4f um per frame', fsData.fZStep * 1e6);
+         
+         fprintf('\n');
+         disp('  Data extraction:');
+         
+         fprintf('    Internal data class: %s\n', fsData.strDataClass);
+         
+         if (isempty(fsData.cmfBlankFrames))
+            disp('    Blank frames not assigned.');
+         else
+            disp('    Some blank frames assigned.');
+         end
+         
+         if (fsData.bConvertToDFF)
+            strDFF = 'true (perform internal dF/F conversion)';
+         else
+            strDFF = 'false (no dF/F conversion)';
+         end
+         dp('bConvertToDFF', strDFF);
+         
+         if (fsData.bSubtractBlank)
+            strSubBlank = 'true (subtract blank frames)';
+         else
+            strSubBlank = 'false (do not subtract blank)';
+         end
+         dp('bSubtractBlank', strSubBlank);
+         
+         if (~isempty(fsData.vfBlackTrace))
+            strBlackTrace = '(black trace assigned)';
+         else
+            strBlackTrace = '(no black trace assigned)';
+         end
+         dp('vfBlackTrace', strBlackTrace);
+          
+         if (fsData.bSubtractBlack)
+            strSubBlack = 'true (subtract assigned black trace)';
+         else
+            strSubBlack = 'false (do not subtract black trace)';
+         end
+         dp('bSubtrackBlack', strSubBlack);
+       
+         
+         fprintf('\n');
+         disp('  Stimulus information:');
+
+         dp('tBlankTime', '%.2f sec', fsData.tBlankTime);
+         
+         if (fsData.bAssignedStimulusIDs)
+            strStimIDSource = '(manual)';
+         elseif (all(isnan(fsData.vnStimulusIDs)))
+            strStimIDSource = '(unassigned)';
+         else
+            strStimIDSource = '(extracted)';
+         end
+         dp('vnStimulusIDs', '[%s] %s', strtrim(sprintf('%d ', fsData.vnStimulusIDs)), strStimIDSource);
+         
+         dp('nNumStimuli', '%d in sequence', fsData.nNumStimuli);
+         
+         if (fsData.bAssignedSequenceIDs)
+            strSeqIDSource = '(manual)';
+         elseif (all(cellfun(@(c)(all(isnan(c))), fsData.cvnSequenceIDs)))
+            strSeqIDSource = '(unassigned)';
+         else
+            strSeqIDSource = '(extracted)';
+         end
+         dp('cvnSequenceIDs', strSeqIDSource);
+
+         if (isempty(fsData.vtStimulusDurations))
+            strStimDurations = '(unassigned)';
+         else
+            strStimDurations = '(manual)';
+         end
+         dp('vtStimulusDurations', strStimDurations);
+         
+         if (fsData.bAssignedStimStartTimes)
+            strStimStartTimes = '(manual)';
+         else
+            strStimStartTimes = '(automatic)';
+         end
+         dp('vtStimulusStartTimes', strStimStartTimes);
+         
+         if (fsData.bAssignedStimEndTimes)
+            strStimEndTimes = '(manual)';
+         else
+            strStimEndTimes = '(automatic)';
+         end
+         dp('vtStimulusEndTimes', strStimEndTimes);
+         
+         if (isempty(fsData.mtStimulusUseTimes))
+            strStimUseTimes = '(automatic)';
+         else
+            strStimUseTimes = '(manual)';
+         end
+         dp('mtStimulusUseTimes', strStimUseTimes);
+         
+         
+         fprintf('\n');
+         disp('  <a href="matlab:methods(''FocusStack'')">Methods</a>, <a href="matlab:properties(''FocusStack'')">Properties</a>');
+         fprintf('\n');
+         
+         
+         function strPropertyLink = property_link(strVarName, strPropertyName, strText)
+            if (~exist('strText', 'var') || isempty(strText))
+               strText = strPropertyName;
+            end
+            strPropertyLink = sprintf('<a href="matlab:%s.%s">%s</a>', strVarName, strPropertyName, strText);
+         end
+         
+         function disp_property(strVarName, strPropertyName, varargin)
+            disp(sprintf('    %s: %s', property_link(strVarName, strPropertyName), sprintf(varargin{:})));
+         end
+      end
+      
+      
 %% --- Save and load functions
       
       % saveobj - SAVE FUNCTION

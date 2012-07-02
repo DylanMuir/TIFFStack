@@ -4,7 +4,7 @@ function OpenFiles(oStack)
 
    nNumFiles = numel(oStack.cstrFilenames);
 
-   try
+%    try
       for (nFile = 1:nNumFiles)
          % - Extract a full file path
          strFullPath = get_full_file_path(oStack.cstrFilenames{nFile});
@@ -34,12 +34,12 @@ function OpenFiles(oStack)
 
       end
 
-   catch sErr
-      % - Display an error message
-      disp('*** FocusStack: Could not open the specified raw data files.');
-
-      rethrow(sErr);
-   end
+%    catch sErr
+%       % - Display an error message
+%       disp('*** FocusStack: Could not open the specified raw data files.');
+% 
+%       rethrow(sErr);
+%    end
 
 end
 
@@ -147,7 +147,7 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
       
    catch mErr
       % - Try to extract basic stack information
-      sHeader.vnFrameSizePixels = [oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Height oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Width];
+      sHeader.vnFrameSizePixels = [oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Width oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Height];
       sHeader.tLineScanTime_ms = oStack.tFrameDuration / sHeader.vnFrameSizePixels(2) / 1e-3;
       sHeader.vfXYZStep_nm(3) = 0;
       sHeader.fZoomFactor = 1./((oStack.fPixelsPerUM ./ sHeader.vnFrameSizePixels(1)) ./ 117);

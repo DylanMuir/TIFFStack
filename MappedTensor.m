@@ -13,6 +13,7 @@
 %           mtVariable = MappedTensor(strExistingFilename, <dimensions>, ...)
 %           mtVariable = MappedTensor(..., 'Class', strClassName)
 %           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
+%           mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -144,6 +145,7 @@ classdef MappedTensor < handle
       fComplexFactor = 1;     % A factor multiplied by the complex part of the tensor (used for scalar multiplication and negation)
       fRealFactor = 1;        % A factor multiplied by the real part of the tensor (used for scalar multiplication and negation)
       nHeaderBytes = 0;       % The number of bytes to skip at the beginning of the file
+      strMachineFormat;       % The desired machine format of the mapped file
    end
    
    methods
@@ -167,6 +169,12 @@ classdef MappedTensor < handle
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
+                  case {'machineformat'}
+                     % - The machine format was specifed
+                     mtVar.strMachineFormat = varargin{nArg+1};
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
                   otherwise
                      % - No other properties are supported
                      error('MappedTensor:InvalidProperty', ...
@@ -186,7 +194,7 @@ classdef MappedTensor < handle
          
          % - Do we need to cast data between these two classes?
          mtVar.bMustCast = ~isequal(mtVar.strStorageClass, mtVar.strClass);
-
+         
          % - Should we map a file on disk, or create a temporary file?
          if (ischar(varargin{1}))
             % - Open an existing file
@@ -212,7 +220,12 @@ classdef MappedTensor < handle
          end
          
          % - Open the file
-         mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+');
+         if (isempty(mtVar.strMachineFormat))
+            mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+');
+            [nul, nul, mtVar.strMachineFormat] = fopen(mtVar.hRealContent);
+         else
+            mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+', 'MachineFormat', mtVar.strMachineFormat);
+         end
                   
          % - Initialise dimension order
          mtVar.vnDimensionOrder = 1:numel(vnTensorSize);
@@ -983,7 +996,7 @@ classdef MappedTensor < handle
          mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
          
          % - open the file
-         mtVar.hCmplxContent = fopen(mtVar.strCmplxFilename, 'r+');
+         mtVar.hCmplxContent = fopen(mtVar.strCmplxFilename, 'r+', 'MachineFormat', mtVar.strMachineFormat);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
