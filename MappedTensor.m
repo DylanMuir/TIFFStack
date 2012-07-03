@@ -1143,7 +1143,7 @@ function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, t
    mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
 end
 
-% mt_read_data_unchecked - FUNCTION Read data without sorting or checking indices
+% mt_read_data_chunks - FUNCTION Read data without sorting or checking indices
 % 'vnUniqueIndices' MUST be sorted and unique; 'vnReverseSort' must be the
 % inverting indices from calling UNIQUE
 function [tData] = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes)
@@ -1175,7 +1175,7 @@ function [tData] = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverse
    tData(vnReverseSort) = vUniqueData;
 end
 
-% mt_write_data_unchecked - FUNCTION Write data without sorting or checking indices
+% mt_write_data_chunks - FUNCTION Write data without sorting or checking indices
 % 'vnUniqueIndices' MUST be sorted and unique; 'vnUniqueDataIndices' must
 % be the corresponding indices into the data from calling UNIQUE
 function mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)

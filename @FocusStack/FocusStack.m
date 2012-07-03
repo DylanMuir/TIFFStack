@@ -438,7 +438,7 @@ classdef FocusStack < handle
          end
          dp('mfFrameShifts', strFrameShifts);
 
-         if (isempty(fsData.fPixelsPerUM)
+         if (isempty(fsData.fPixelsPerUM))
             dp('fPixelsPerUM', '(not set)');
          else
             dp('fPixelsPerUM', '%.4f (%.2f um per pixel)', fsData.fPixelsPerUM, 1/fsData.fPixelsPerUM);
