@@ -438,10 +438,24 @@ classdef FocusStack < handle
          end
          dp('mfFrameShifts', strFrameShifts);
 
-         dp('fPixelsPerUM', '%.4f (%.2f um per pixel)', fsData.fPixelsPerUM, 1/fsData.fPixelsPerUM);
-         dp('tFrameDuration', '%.4f (%.2f Hz)', fsData.tFrameDuration, 1/fsData.tFrameDuration);
-         dp('fZStep', '%.4f um per frame', fsData.fZStep * 1e6);
+         if (isempty(fsData.fPixelsPerUM)
+            dp('fPixelsPerUM', '(not set)');
+         else
+            dp('fPixelsPerUM', '%.4f (%.2f um per pixel)', fsData.fPixelsPerUM, 1/fsData.fPixelsPerUM);
+         end
          
+         if (isempty(fsData.tFrameDuration))
+            dp('tFrameDuration', '(not set)');
+         else
+            dp('tFrameDuration', '%.4f (%.2f Hz)', fsData.tFrameDuration, 1/fsData.tFrameDuration);
+         end
+         
+         if (isempty(fsData.fZStep))
+            dp('fZStep', '(not set)');
+         else
+            dp('fZStep', '%.4f um per frame', fsData.fZStep * 1e6);
+         end
+                     
          fprintf('\n');
          disp('  Data extraction:');
          
