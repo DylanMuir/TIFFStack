@@ -41,7 +41,7 @@ uint32_t ByteSwapLong(uint32_t nData) {
    return ((nData & 0xFF) << 24) | ((nData & 0xFF00) << 8) | ((nData & 0xFF0000) >> 8) | ((nData & 0xFF000000) >> 24);
 }
 
-void ByteSwapBufferShort(uint16_t *vnSourceData, unsigned long int *vnDestData, long unsigned int nNumEntries, bool bSwap) {
+void ByteSwapBufferShort(uint16_t *vnSourceData, uint64_t *vnDestData, long unsigned int nNumEntries, bool bSwap) {
    uint16_t				nThisData;
    unsigned long int nIndex;
    
@@ -55,7 +55,7 @@ void ByteSwapBufferShort(uint16_t *vnSourceData, unsigned long int *vnDestData, 
    }
 }
 
-void ByteSwapBufferLong(uint32_t *vnSourceData, unsigned long int *vnDestData, long unsigned int nNumEntries, bool bSwap) {
+void ByteSwapBufferLong(uint32_t *vnSourceData, uint64_t *vnDestData, long unsigned int nNumEntries, bool bSwap) {
    uint32_t				nThisData;
    unsigned long int nIndex;
    
@@ -69,7 +69,7 @@ void ByteSwapBufferLong(uint32_t *vnSourceData, unsigned long int *vnDestData, l
    }
 }
 
-void BufferSwapByteShort(unsigned long int *vnSourceData, uint16_t *vnDestData, long unsigned int nNumEntries, bool bSwap) {
+void BufferSwapByteShort(uint64_t *vnSourceData, uint16_t *vnDestData, long unsigned int nNumEntries, bool bSwap) {
    uint16_t				nThisData;
    unsigned long int nIndex;
    
@@ -83,7 +83,7 @@ void BufferSwapByteShort(unsigned long int *vnSourceData, uint16_t *vnDestData, 
    }
 }
 
-void BufferSwapByteLong(unsigned long int *vnSourceData, uint32_t *vnDestData, long unsigned int nNumEntries, bool bSwap) {
+void BufferSwapByteLong(uint64_t *vnSourceData, uint32_t *vnDestData, long unsigned int nNumEntries, bool bSwap) {
    uint32_t				nThisData;
    unsigned long int	nIndex;
    
@@ -97,40 +97,40 @@ void BufferSwapByteLong(unsigned long int *vnSourceData, uint32_t *vnDestData, l
    }
 }
 
-void betohs(uint16_t *vnSourceData, unsigned long int *vnDestData, long unsigned int nNumEntries) {
+void betohs(uint16_t *vnSourceData, uint64_t *vnDestData, long unsigned int nNumEntries) {
    ByteSwapBufferShort(vnSourceData, vnDestData, nNumEntries, !is_bigendian());
 }
 
-void betohl(uint32_t *vnSourceData, unsigned long int *vnDestData, long unsigned int nNumEntries) {
+void betohl(uint32_t *vnSourceData, uint64_t *vnDestData, long unsigned int nNumEntries) {
    ByteSwapBufferLong(vnSourceData, vnDestData, nNumEntries, !is_bigendian());
 }
 
-void letohs(uint16_t *vnSourceData, unsigned long int *vnDestData, long unsigned int nNumEntries) {
+void letohs(uint16_t *vnSourceData, uint64_t *vnDestData, long unsigned int nNumEntries) {
    ByteSwapBufferShort(vnSourceData, vnDestData, nNumEntries, is_bigendian());
 }
 
-void letohl(uint32_t *vnSourceData, unsigned long int *vnDestData, long unsigned int nNumEntries) {
+void letohl(uint32_t *vnSourceData, uint64_t *vnDestData, long unsigned int nNumEntries) {
    ByteSwapBufferLong(vnSourceData, vnDestData, nNumEntries, is_bigendian());
 }
 
-void htobes(unsigned long int *vnSourceData, uint16_t *vnDestData, long unsigned int nNumEntries) {
+void htobes(uint64_t *vnSourceData, uint16_t *vnDestData, long unsigned int nNumEntries) {
    BufferSwapByteShort(vnSourceData, vnDestData, nNumEntries, !is_bigendian());
 }
 
-void htobel(unsigned long int *vnSourceData, uint32_t *vnDestData, long unsigned int nNumEntries) {
+void htobel(uint64_t *vnSourceData, uint32_t *vnDestData, long unsigned int nNumEntries) {
    BufferSwapByteLong(vnSourceData, vnDestData, nNumEntries, !is_bigendian());
 }
 
-void htoles(unsigned long int *vnSourceData, uint16_t *vnDestData, long unsigned int nNumEntries) {
+void htoles(uint64_t *vnSourceData, uint16_t *vnDestData, long unsigned int nNumEntries) {
    BufferSwapByteShort(vnSourceData, vnDestData, nNumEntries, is_bigendian());
 }
 
-void htolel(unsigned long int *vnSourceData, uint32_t *vnDestData, long unsigned int nNumEntries) {
+void htolel(uint64_t *vnSourceData, uint32_t *vnDestData, long unsigned int nNumEntries) {
    BufferSwapByteLong(vnSourceData, vnDestData, nNumEntries, is_bigendian());
 }
 
 
-int ReadFrame(FILE *hFile, unsigned long int *vnFrameBuffer, uint8_t *vnFrameBytesBuf, unsigned long int nPixelsPerFrame, long unsigned int nBytesPerPixel, bool bBigEndian) {
+int ReadFrame(FILE *hFile, uint64_t *vnFrameBuffer, uint8_t *vnFrameBytesBuf, unsigned long int nPixelsPerFrame, long unsigned int nBytesPerPixel, bool bBigEndian) {
    int nRead, nIndex;
    
    if (feof(hFile))
@@ -179,7 +179,7 @@ int ReadFrame(FILE *hFile, unsigned long int *vnFrameBuffer, uint8_t *vnFrameByt
    }
 }
 
-void WriteFrame(unsigned long int *vnFrameBuffer, FILE *hFile, uint8_t *vnFrameBytesBuf, unsigned long int nPixelsPerFrame, long unsigned int nBytesPerPixel, bool bBigEndian) {
+void WriteFrame(uint64_t *vnFrameBuffer, FILE *hFile, uint8_t *vnFrameBytesBuf, unsigned long int nPixelsPerFrame, long unsigned int nBytesPerPixel, bool bBigEndian) {
    int nIndex;
    
    /* Convert endian-ness */
@@ -212,7 +212,7 @@ void WriteFrame(unsigned long int *vnFrameBuffer, FILE *hFile, uint8_t *vnFrameB
    }
    
    /* - Write buffer */
-   if (fwrite(vnFrameBytesBuf, 1, nPixelsPerFrame, hFile) != nPixelsPerFrame) {
+   if (fwrite(vnFrameBytesBuf, 1, nBytesPerPixel * nPixelsPerFrame, hFile) != nBytesPerPixel * nPixelsPerFrame) {
       errprintf("*** bin_frames_time/WriteFrame: Could not write to output file.\n   Reason: [%s]\n", strerror(errno));
       exit(-1);
    }
@@ -239,9 +239,9 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
         long unsigned int nXPixels, long unsigned int  nYPixels, long unsigned int  nChannels, long unsigned int nBytesPerPixel, long unsigned int  nFramesPerBin,
         bool bBigEndian) {
    FILE					*hInputFile, *hOutputFile;
-   unsigned long int	nGlobalFrameIndex, nPixelsPerFrame, nFramesThisBin = 0,
-           *vnBinBuf, *vnThisFrame;
+   unsigned long int	nGlobalFrameIndex, nPixelsPerFrame, nFramesThisBin = 0;
    uint8_t				*vnFrameBytesBuf;
+	uint64_t				*vnBinBuf, *vnThisFrame;
    int nSampleIndex;
    
 
@@ -267,7 +267,7 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
    
    nPixelsPerFrame = nXPixels * nYPixels * nChannels;
    
-   if ((vnBinBuf = malloc(sizeof(unsigned long int) * nPixelsPerFrame)) == NULL) {
+   if ((vnBinBuf = malloc(sizeof(uint64_t) * nPixelsPerFrame)) == NULL) {
       fclose(hInputFile);
       fclose(hOutputFile);
       
@@ -276,9 +276,9 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
    }
    
    /* - Clear the buffer */
-   memset(vnBinBuf, 0, sizeof(unsigned long int) * nPixelsPerFrame);
+   memset(vnBinBuf, 0, sizeof(uint64_t) * nPixelsPerFrame);
    
-   if ((vnThisFrame = (unsigned long int *) malloc(sizeof(unsigned long int) * nPixelsPerFrame)) == NULL) {
+   if ((vnThisFrame = (uint64_t *) malloc(sizeof(uint64_t) * nPixelsPerFrame)) == NULL) {
       fclose(hInputFile);
       fclose(hOutputFile);
       
@@ -298,18 +298,15 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
    
    /* -- Bin frames, loop over frames */
    nGlobalFrameIndex = 0;
-   printf("Read frame %10ld", nGlobalFrameIndex);
+   printf("Wrote frame %10ld", nGlobalFrameIndex);
    
    while (!ReadFrame(hInputFile, vnThisFrame, vnFrameBytesBuf, nPixelsPerFrame, nBytesPerPixel, bBigEndian)) {
       /* - Accumulate frame */
       for (nSampleIndex = 0; nSampleIndex < nPixelsPerFrame; nSampleIndex++) {
-         vnBinBuf[nSampleIndex] += vnThisFrame[nSampleIndex];
+         vnBinBuf[nSampleIndex] += (uint64_t) vnThisFrame[nSampleIndex];
       }
       
-      printf("\b\b\b\b\b\b\b\b\b\b%10ld", nGlobalFrameIndex);
-      
       nFramesThisBin++;
-      nGlobalFrameIndex++;
       
       if (nFramesThisBin == nFramesPerBin) {
          /* - Normalise frame */
@@ -321,6 +318,9 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
          
          nFramesThisBin = 0;
          memset(vnBinBuf, 0, sizeof(unsigned long int) * nPixelsPerFrame);
+
+         nGlobalFrameIndex++;
+         printf("\b\b\b\b\b\b\b\b\b\b%10ld", nGlobalFrameIndex);         
       }
    }
    printf("\n");
