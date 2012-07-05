@@ -14,7 +14,14 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
-#include <stdbool.h>
+/*#include <stdbool.h>*/
+#define  bool  uint8_t
+
+#ifdef   _WIN32
+   #define  FORCE_BINARY_FILE "b"
+#else
+   #define  FORCE_BINARY_FILE
+#endif
 
 #ifdef MATLAB_MEX_FILE
    #include "mex.h"
@@ -143,7 +150,7 @@ int ReadFrame(FILE *hFile, uint64_t *vnFrameBuffer, uint8_t *vnFrameBytesBuf, un
       if (ferror(hFile)) {
          errprintf("*** bin_frames_time/ReadFrame: Could not read from file.\n   Reason: %s\n", strerror(errno));
       }
-      
+
       return -1;
       
    } else {
@@ -247,13 +254,13 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
 
    /* -- Try to open the files */
    
-   if ((hInputFile = fopen(strInputFile, "r")) == NULL) {
+   if ((hInputFile = fopen(strInputFile, "r" FORCE_BINARY_FILE)) == NULL) {
       errprintf("*** %s/TemporalBinning: Could not open file [%s] for reading.\n   Reason: [%s]\n",
                 strProgramName, strInputFile, strerror(errno));
       return -1;
    }
    
-   if ((hOutputFile = fopen(strOutputFile, "w")) == NULL) {
+   if ((hOutputFile = fopen(strOutputFile, "w" FORCE_BINARY_FILE)) == NULL) {
       fclose(hInputFile);
       
       errprintf("*** %s/TemporalBinning: Could not open file [%s] for writing.\n   Reason: [%s]\n",
@@ -315,7 +322,7 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
          WriteFrame(vnBinBuf, hOutputFile, vnFrameBytesBuf, nPixelsPerFrame, nBytesPerPixel, bBigEndian);
          
          nFramesThisBin = 0;
-         memset(vnBinBuf, 0, sizeof(unsigned long int) * nPixelsPerFrame);
+         memset(vnBinBuf, 0, sizeof(uint64_t) * nPixelsPerFrame);
 
          nGlobalFrameIndex++;
       }

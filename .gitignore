@@ -6,3 +6,5 @@ bin_frames_time
 *.log
 *.mexmaci
 *.mexmaci64
+
+*.mexw64

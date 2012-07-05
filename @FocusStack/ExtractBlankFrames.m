@@ -47,10 +47,10 @@ cSubs{end+1} = 1;
 bGetStds = nargout > 1;
 
 if (prod(vnDataSize) == 0)
-    tfBlankMean = ones(vnDataSize);
+    tfBlankMean = nan(vnDataSize);
 
     if (bGetStds)
-        tfBlankStd = ones(vnDataSize);
+        tfBlankStd = nan(vnDataSize);
     end
     
     return;
