@@ -298,8 +298,6 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
    
    /* -- Bin frames, loop over frames */
    nGlobalFrameIndex = 0;
-   printf("Wrote frame %10ld", nGlobalFrameIndex);
-   
    while (!ReadFrame(hInputFile, vnThisFrame, vnFrameBytesBuf, nPixelsPerFrame, nBytesPerPixel, bBigEndian)) {
       /* - Accumulate frame */
       for (nSampleIndex = 0; nSampleIndex < nPixelsPerFrame; nSampleIndex++) {
@@ -320,10 +318,10 @@ int TemporalBinning(const char *strProgramName, const char *strInputFile, const 
          memset(vnBinBuf, 0, sizeof(unsigned long int) * nPixelsPerFrame);
 
          nGlobalFrameIndex++;
-         printf("\b\b\b\b\b\b\b\b\b\b%10ld", nGlobalFrameIndex);         
       }
    }
-   printf("\n");
+
+    printf("--- %s: Wrote [%ld] frames.\n", strProgramName, nGlobalFrameIndex);
    
    
    /* -- Free memory */
