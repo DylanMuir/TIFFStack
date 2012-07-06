@@ -198,8 +198,12 @@ classdef FocusStack < handle
       function [tBlankTime] = get.tBlankTime(oStack)
          vtBlankTimes = [oStack.vsHeaders.tBlankTime];
          
-         if (all(vtBlankTimes == vtBlankTimes(1)))
+         if (isempty(vtBlankTimes))
+            tBlankTime = [];
+            
+         elseif (all(vtBlankTimes == vtBlankTimes(1)))
             tBlankTime = vtBlankTimes(1);
+            
          else
             tBlankTime = vtBlankTimes;
          end
