@@ -14,13 +14,13 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
-/*#include <stdbool.h>*/
-#define  bool  uint8_t
 
 #ifdef   _WIN32
    #define  FORCE_BINARY_FILE "b"
+   #define  bool  uint8_t
 #else
    #define  FORCE_BINARY_FILE
+   #include <stdbool.h>
 #endif
 
 #ifdef MATLAB_MEX_FILE
