@@ -1118,13 +1118,13 @@ function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeade
    
    % - Maximise chunk probability and minimise number of reads by reading
    % only sorted unique entries
-   [vnUniqueIndices, vnReverseSort] = unique(vnLinearIndices);
+   [vnUniqueIndices, nul, vnReverseSort] = unique(vnLinearIndices);
    
    % - Split into readable chunks
-   cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
+   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
 
    % - Call read function
-   tData = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes);
+   tData = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes);
 end
 
 % mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
@@ -1137,32 +1137,32 @@ function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, t
    [vnUniqueIndices, vnUniqueDataIndices] = unique(vnLinearIndices);
 
    % - Split into readable chunks
-   cvnFileChunkIndices = SplitFileChunks(vnUniqueIndices);   
+   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices);   
    
    % - Call writing function
-   mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
+   mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
 end
 
 % mt_read_data_chunks - FUNCTION Read data without sorting or checking indices
 % 'vnUniqueIndices' MUST be sorted and unique; 'vnReverseSort' must be the
 % inverting indices from calling UNIQUE
-function [tData] = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes)
-   nNumChunks = numel(cvnFileChunkIndices);
+function [tData] = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes)
+   nNumChunks = size(mnFileChunkIndices, 1);
    
    % - Allocate data
    [nClassSize, strStorageClass] = ClassSize(strClass);
    tData = zeros(vnDataSize, strStorageClass);
-   vUniqueData = zeros(numel(vnReverseSort), 1, strStorageClass);
+   vUniqueData = zeros(numel(vnUniqueIndices), 1, strStorageClass);
    
    % - Read data in chunks
    nDataPointer = 1;
    for (nChunkIndex = 1:nNumChunks)
       % - Get chunk info
-      nChunkSkip = cvnFileChunkIndices{nChunkIndex}{2};
-      nChunkSize = cvnFileChunkIndices{nChunkIndex}{3};
+      nChunkSkip = mnFileChunkIndices(nChunkIndex, 2);
+      nChunkSize = mnFileChunkIndices(nChunkIndex, 3);
       
       % - Seek file to beginning of chunk
-      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}{1}-1) * nClassSize + nHeaderBytes, 'bof');
+      fseek(hDataFile, (mnFileChunkIndices(nChunkIndex, 1)-1) * nClassSize + nHeaderBytes, 'bof');
       
       % - Normal forward read
       vUniqueData(nDataPointer:nDataPointer+nChunkSize-1) = fread(hDataFile, nChunkSize, [strStorageClass '=>' strClass], (nChunkSkip-1) * nClassSize);
@@ -1172,14 +1172,14 @@ function [tData] = mt_read_data_chunks(hDataFile, cvnFileChunkIndices, vnReverse
    end
    
    % - Assign data back to original indexing order
-   tData(vnReverseSort) = vUniqueData;
+   tData = reshape(vUniqueData(vnReverseSort), vnDataSize);
 end
 
 % mt_write_data_chunks - FUNCTION Write data without sorting or checking indices
 % 'vnUniqueIndices' MUST be sorted and unique; 'vnUniqueDataIndices' must
 % be the corresponding indices into the data from calling UNIQUE
-function mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
-   nNumChunks = numel(cvnFileChunkIndices);
+function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
+   nNumChunks = size(mnFileChunkIndices, 1);
 
    % - Do we need to replicate the data?
    if (isscalar(tData) && prod(vnDataSize) > 1)
@@ -1199,11 +1199,11 @@ function mt_write_data_chunks(hDataFile, cvnFileChunkIndices, vnUniqueDataIndice
    [nClassSize, strStorageClass] = ClassSize(strClass);
    for (nChunkIndex = 1:nNumChunks)
       % - Get chunk info
-      nChunkSkip = cvnFileChunkIndices{nChunkIndex}{2};
-      nChunkSize = cvnFileChunkIndices{nChunkIndex}{3};
+      nChunkSkip = mnFileChunkIndices(nChunkIndex, 2);
+      nChunkSize = mnFileChunkIndices(nChunkIndex, 3);
 
       % - Seek file to beginning of chunk
-      fseek(hDataFile, (cvnFileChunkIndices{nChunkIndex}{1}-1) * nClassSize + nHeaderBytes, 'bof');
+      fseek(hDataFile, (mnFileChunkIndices(nChunkIndex, 1)-1) * nClassSize + nHeaderBytes, 'bof');
       
       % - Normal forward write of chunk data
       fwrite(hDataFile, vUniqueData(nDataPointer:nDataPointer+nChunkSize-1), strStorageClass, (nChunkSkip-1) * nClassSize);
@@ -1244,20 +1244,20 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
          
       else
          % - This dimension was ok
-         cCheckedRefs{nRefDim} = cRefs{nRefDim}(:);
+         cCheckedRefs{nRefDim} = cRefs{nRefDim};
       end
    end
    
-   % - Convert to linear indexing
+   % - Convert to linear indexing; work out data size
    if (numel(cRefs) == 1)
       vnLinearIndices = cCheckedRefs{1};
+      vnDataSize = size(cCheckedRefs{1});
    else
+      cCheckedRefs = cellfun(@(c)c(:), cCheckedRefs, 'UniformOutput', false);
       [cFullRefs{1:numel(cRefs)}] = ndgrid(cCheckedRefs{:});
       vnLinearIndices = sub2ind(vnLims, cFullRefs{:});
+      vnDataSize = cellfun(@numel, cCheckedRefs);
    end
-   
-   % - Work out data size
-   vnDataSize = cellfun(@numel, cCheckedRefs);
    
    if (numel(vnDataSize) == 1)
       vnDataSize(2) = 1;
@@ -1266,16 +1266,16 @@ end
 
 % SplitFileChunks - FUNCTION Split a set of indices into contiguous chunks
 % (with a consistent skip step within a chunk)
-function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
+function [mnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
    % - Handle degenerate cases
    switch (numel(vnLinearIndices))
       case 1
          % - Single element
-         cvnFileChunkIndices = {{vnLinearIndices, 1, 1}};
+         mnFileChunkIndices = [vnLinearIndices, 1, 1];
          
       case 2
          % - Two elements
-         cvnFileChunkIndices = {{vnLinearIndices(1), vnLinearIndices(2) - vnLinearIndices(1), 2}};
+         mnFileChunkIndices = [vnLinearIndices(1), vnLinearIndices(2) - vnLinearIndices(1), 2];
 
       otherwise
          % - Get diffs
@@ -1285,7 +1285,7 @@ function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
          nIndex = 1;
          % - Preallocate by estimating
          nChunkAlloc = ceil(numel(vnLinearIndices)/2);
-         cvnFileChunkIndices = cell(nChunkAlloc, 1);
+         mnFileChunkIndices = nan(nChunkAlloc, 3);
          while (nIndex <= numel(vnLinearIndices))
             nChunkLength = find(vnDiffs(nIndex:end) ~= vnDiffs(nIndex), 1, 'first');
             
@@ -1295,13 +1295,13 @@ function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
             end
             
             % - Define this chunk
-            cvnFileChunkIndices{nChunk} = {vnLinearIndices(nIndex) vnDiffs(nIndex) nChunkLength};
+            mnFileChunkIndices(nChunk, :) = [vnLinearIndices(nIndex), vnDiffs(nIndex), nChunkLength];
             
             % - Move to the next chunk; reallocate if necessary
             nChunk = nChunk + 1;
             if (nChunk > nChunkAlloc)
                nChunkAlloc = nChunkAlloc*2;
-               cvnFileChunkIndices{nChunkAlloc} = [];
+               mnFileChunkIndices(nChunkAlloc, :) = nan;
             end
             
             % - Shift diffs array
@@ -1309,7 +1309,7 @@ function [cvnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
          end
          
          % - Trim chunks
-         cvnFileChunkIndices = cvnFileChunkIndices(1:nChunk-1);
+         mnFileChunkIndices = mnFileChunkIndices(1:nChunk-1, :);
    end
 end
 

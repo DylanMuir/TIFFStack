@@ -403,7 +403,7 @@ void mexFunction(int nLHS, mxArray *pLHS[], int nRHS, const mxArray *pRHS[]) {
    char						*strInputFile, *strOutputFile;
    unsigned long int		nXPixels, nYPixels, nChannels, nBytesPerPixel, nFramesPerBin;
    bool						bBigEndian;
-   int						nLength;
+   mwSize					nLength;
    
    /* -- Check arguments */
 
@@ -435,12 +435,12 @@ void mexFunction(int nLHS, mxArray *pLHS[], int nRHS, const mxArray *pRHS[]) {
    
    /* -- Parse arguments */
    
-   nLength = mxGetN(pRHS[0])*sizeof(mxChar)+1;
-   strInputFile = malloc(nLength);
+   nLength = mxGetM(pRHS[0])*mxGetN(pRHS[0])+1;
+   strInputFile = malloc(nLength*sizeof(mxChar));
    mxGetString(pRHS[0], strInputFile, nLength);
    
-   nLength = mxGetN(pRHS[1])*sizeof(mxChar)+1;
-   strOutputFile = malloc(nLength);
+   nLength = mxGetM(pRHS[1])*mxGetN(pRHS[1])+1;
+   strOutputFile = malloc(nLength*sizeof(mxChar));
    mxGetString(pRHS[1], strOutputFile, nLength);
    
    nXPixels = (unsigned long int) mxGetScalar(pRHS[2]);
