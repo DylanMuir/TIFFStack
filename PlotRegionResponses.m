@@ -30,7 +30,7 @@ function [vhFigures, mfRegionResponses] = ...
 
 % -- Defaults
 
-DEF_nNumResponsesPerFigure = 5;
+DEF_nNumResponsesPerFigure = 4;
 
 
 % -- Check arguments
@@ -130,27 +130,23 @@ end
 
 vhFigures = [];
 
-if (exist('nLimitNumberOfCells', 'var') && ~isempty(nLimitNumberOfCells) && isscalar(nLimitNumberOfCells))
-   vnPlotRegions = 1:min(nNumRegions, nLimitNumberOfCells);
-elseif ((numel(nLimitNumberOfCells) == 2) && (nLimitNumberOfCells(1) == nLimitNumberOfCells(2)))
-   vnPlotRegions = nLimitNumberOfCells(1);
-else
-   vnPlotRegions = nLimitNumberOfCells;
+if (exist('nLimitNumberOfCells', 'var') && ~isempty(nLimitNumberOfCells))
+   nNumRegions = min(nNumRegions, nLimitNumberOfCells);
 end
 
 % - Loop over regions
-for (nRegion = 1:numel(vnPlotRegions))
+for (nRegion = 1:nNumRegions)
    if (mod(nRegion-1, DEF_nNumResponsesPerFigure) == 0)
       vhFigures(end+1) = figure; %#ok<AGROW>
       set(gcf, 'Color', 'w');
    end
    
    % - Create a subplot
-   subplot(DEF_nNumResponsesPerFigure, 1, mod(nRegion-1, DEF_nNumResponsesPerFigure)+1);
+   subplot(DEF_nNumResponsesPerFigure/2, DEF_nNumResponsesPerFigure/2, mod(nRegion-1, DEF_nNumResponsesPerFigure)+1);
    
    % - Determine plot limits
-   fYMin = min(mfRegionResponses(vnPlotRegions(nRegion), :));
-   fYMax = max(mfRegionResponses(vnPlotRegions(nRegion), :));
+   fYMin = min(mfRegionResponses(nRegion, :));
+   fYMax = max(mfRegionResponses(nRegion, :));
    vfYLims = [fYMin fYMax];
 
    % - Loop over stimulus segments
@@ -159,26 +155,36 @@ for (nRegion = 1:numel(vnPlotRegions))
       if (~isempty(mtStimLabelTimes) && ~any(isnan(mtStimLabelTimes(nStim, :))))
          tStimStart = vtStimulusBlockStartTimes(nStim) + mtStimLabelTimes(nStim, 1);
          tStimEnd = vtStimulusBlockStartTimes(nStim) + mtStimLabelTimes(nStim, 2);
-         vtStimTimes = [tStimStart tStimEnd];
+         if size(mtStimLabelTimes, 2) == 3;
+             tAdaptationStart = vtStimulusBlockStartTimes(nStim) + mtStimLabelTimes(nStim, 3);
+         else
+             tAdaptationStart = [];
+         end
+         vtStimTimes = [tStimStart tStimEnd tAdaptationStart];
          
          if (mbHighlightStims(nRegion, nStim))
             vfColour = 0.75 * [1 0 0];
          else
-            vfColour = 0.6 * [1 1 1];
+            vfColour = 0.8 * [1 1 1];
          end
          
-         hPatch = fill(vtStimTimes([1 1 end end 1]), vfYLims([1 2 2 1 1]), vfColour);
-         set(hPatch, 'LineStyle', 'none');
+         hPatchStim = fill(vtStimTimes([1 1 2 2 1]), vfYLims([1 2 2 1 1]), vfColour);
+         set(hPatchStim, 'LineStyle', 'none');
          hold on;
+         if size(mtStimLabelTimes, 2) == 3;
+             hPatchAdapt = fill(vtStimTimes([3 3 1 1 3]), vfYLims([1 2 2 1 1]), ([1 1 1] + vfColour) / 2);
+             set(hPatchAdapt, 'LineStyle', 'none');
+         end
+         
       end      
       
       % - Plot individual trials for this stimulus
       vfAvgStimTrace = [];
       vnNorm = [];
       for (nBlock = 1:nNumBlocks)
-         % - Find frames corresponding to this stimulus ID in this block
+         % - Find frames corresponding to this stimulus ID in this block 
          vbStimBlockFrames = (vnStimulusSeqID == nStim) & (vnBlockIndex == nBlock);
-         vfThisTrialTrace = mfRegionResponses(vnPlotRegions(nRegion), vbStimBlockFrames);
+         vfThisTrialTrace = mfRegionResponses(nRegion, vbStimBlockFrames);
          
          % - Find times to plot this response trace on
          vtThisPresTimes = vtStimulusBlockStartTimes(nStim) + vtTimeInStimPresentation(vbStimBlockFrames);
@@ -188,7 +194,7 @@ for (nRegion = 1:numel(vnPlotRegions))
          end
          
          % - Plot this trial trace
-         plot(vtThisPresTimes, vfThisTrialTrace, 'Color', 0.25 * [1 1 1], 'LineWidth', 3);
+         plot(vtThisPresTimes, vfThisTrialTrace, 'Color', 0.6 * [1 1 1], 'LineWidth', 1);
          hold on;
             
          % - Accumulate stim traces
@@ -209,7 +215,8 @@ for (nRegion = 1:numel(vnPlotRegions))
       % - Plot the average fluorescence trace for the region
       nStimLength = numel(vfAvgStimTrace);
       vtThisStimTime = vtStimulusBlockStartTimes(nStim) + (0:nStimLength-1) * fsStack.tFrameDuration;
-      plot(vtThisStimTime, vfAvgStimTrace ./ vnNorm, 'r-', 'LineWidth', 2);   
+      plot(vtThisStimTime(find(vnNorm == max(vnNorm))), vfAvgStimTrace(find(vnNorm == max(vnNorm)))...
+          ./ vnNorm(find(vnNorm == max(vnNorm))), 'Color', 0 * [1 1 1], 'LineWidth', 2);
    end
    
    % - Get axis limits
@@ -238,11 +245,12 @@ for (nRegion = 1:numel(vnPlotRegions))
    % - Set the plot properties
    axis([0 vfLims(2) vfYLims]);
 %    axis tight;
-   box on;
+   box off;
    
-   if (vnPlotRegions(nRegion) ~= sRegions.NumObjects) && (mod(nRegion-1, DEF_nNumResponsesPerFigure) ~= (DEF_nNumResponsesPerFigure-1))
-      set(gca, 'XTick', []);
-   end
+   % plot only every "DEF_nNumResponsesPerFigure"-th figure
+%    if (nRegion ~= sRegions.NumObjects) && (mod(nRegion-1, DEF_nNumResponsesPerFigure) ~= (DEF_nNumResponsesPerFigure-1))
+%     set(gca, 'XTick', []);
+%    end
    
    set(gca, 'Color', 'none', 'YTick', [], 'LineWidth', 1, 'FontSize', 18);
    ylabel(gca, nRegion, 'FontSize', 24);

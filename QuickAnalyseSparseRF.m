@@ -14,7 +14,7 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
 %                               tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
 %                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
-%                               mfCustomAlignment, bOrderROIs, fhExtractionFunction)
+%                               mfCustomAlignment, bOrderROIs, fhExtractionFunctionFunction)
 
 % -- Defaults
 
@@ -52,7 +52,7 @@ if (~exist('bOrderROIs', 'var') || isempty(bOrderROIs))
    bOrderROIs = DEF_bOrderROIs;
 end
 
-DEF_fhExtractionFunction = ExtractMean(1, bAssignBlank);
+DEF_fhExtractionFunction = @(bDFF)ExtractMean(1, bDFF);
 if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
    fhExtractionFunction = DEF_fhExtractionFunction;
 end
@@ -135,7 +135,7 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
 %    rethrow(meErr);
 % end
 
-fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
+% fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
 % fsStack.fPixelsPerUM = 5;
 
 % - Save stack
@@ -172,7 +172,7 @@ save(strTempFilename, 'sRegions', '-append');
 disp('--- QuickAnalyseSparseRF: Extracting responses...');
 
 [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, tfTrialResponses, tnTrialSampleSizes] = ...
-   ExtractRegionResponses(fsStack, sRegionsPlusNP, 1, fhExtractionFunction);
+   ExtractRegionResponses(fsStack, sRegionsPlusNP, 1, fhExtractionFunction(bAssignBlank));
 
 if (bAssignBlank)
    disp('--- QuickAnalyseSparseRF: Measuring responsiveness...');
@@ -251,6 +251,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
       
       % - Turn off DFF conversion, just in case
       fsStack.BlankNormalisation('none');
+      fhEF = fhExtractionFunction(false);
       
       for (nBlock = 1:numel(fsStack.cstrFilenames)) %#ok<FORPF>
          % - Get the median blank frame for this block
@@ -258,7 +259,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          vbBlockBlankStimFrames = vbBlockFrames & (vnStimulusSeqID == 1);
          vbBlockBlankFrames = vbBlockBlankStimFrames & vbUseFrame;
          
-         tfBlankFrames = reshape(fhExtractionFunction(fsStack, :, vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
+         tfBlankFrames = reshape(fhEF(fsStack, :, vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
          mfThisBlankAvg = nanmedian(tfBlankFrames, 3);
          
          % - Filter zeros, replace with NaN
@@ -281,7 +282,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
                (vtTimeInStimPresentation <= tPixelBlankTime);
             
             % - Extract these blank frames
-            tfPresBlank = reshape(fhExtractionFunction(fsStack, :, vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
+            tfPresBlank = reshape(fhEF(fsStack, :, vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
             
             % - Assign the mean; Std.Dev is taken from block blank
             fsStack.AssignBlankFrame(cat(3, nanmedian(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
