@@ -35,6 +35,10 @@
 % beginning of an (existing) binary file, by throwing away the specified
 % number of header bytes.
 %
+% The optional parameter 'strMachineFormat' allows you to speciy big-endian
+% ('ieee-be') or little-endian ('ieee-le') formats for data storage and
+% reading.  If not specified, the machine-native format will be used.
+%
 % Usage: size(mtVariable)
 %        mtVariable(:) = rand(100, 100, 100);
 %        mfData = mtVariable(:, :, 34, 2);
@@ -123,6 +127,12 @@
 %       The second argument to the function is passed the index of the
 %       current slice.  This line will multiply each slice in mtVar by a
 %       scalar corresponding to that slice index.
+%
+% Note: MappedTensor provides an accelerated MEX function for performing
+% file reads and writes.  MappedTensor will attempt to compile this
+% function when a MappedTensor variable is first created.  This requires
+% mex to be configured correctly for your system.  If compilation fails,
+% then a slower matlab version will be used.
 
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 19th November, 2010
@@ -146,6 +156,8 @@ classdef MappedTensor < handle
       fRealFactor = 1;        % A factor multiplied by the real part of the tensor (used for scalar multiplication and negation)
       nHeaderBytes = 0;       % The number of bytes to skip at the beginning of the file
       strMachineFormat;       % The desired machine format of the mapped file
+      bBigEndian;             % Should the data be stored in big-endian format?
+      hShimFunc;              % Handle to the (hopefully compiled) shim function
    end
    
    methods
@@ -154,7 +166,7 @@ classdef MappedTensor < handle
          % - Filter arguments for properties
          vbKeepArg = true(numel(varargin), 1);
          nArg = 2;
-         while (nArg < numel(varargin))
+         while (nArg <= numel(varargin))
             if (ischar(varargin{nArg}))
                switch(lower(varargin{nArg}))
                   case {'class'}
@@ -178,7 +190,7 @@ classdef MappedTensor < handle
                   otherwise
                      % - No other properties are supported
                      error('MappedTensor:InvalidProperty', ...
-                        '*** MappedTensor: ''%s'' is not a valid property.', varargin{nArg});
+                        '*** MappedTensor: ''%s'' is not a valid property.  Use the ''Class'' keyword to specify the tensor class.', varargin{nArg});
                end
             end
             
@@ -219,14 +231,29 @@ classdef MappedTensor < handle
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
          
+         % - Get a handle to the appropriate shim function
+         mtVar.hShimFunc = GetShimFunctionHandle;
+         
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
-            mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+');
-            [nul, nul, mtVar.strMachineFormat] = fopen(mtVar.hRealContent);
+            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.strRealFilename);
          else
-            mtVar.hRealContent = fopen(mtVar.strRealFilename, 'r+', mtVar.strMachineFormat);
+            mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.strRealFilename, mtVar.strMachineFormat);
          end
-                  
+            
+         % - Check machine format
+         switch (lower(mtVar.strMachineFormat))
+            case {'ieee-be'}
+               mtVar.bBigEndian = true;
+               
+            case {'ieee-le'}
+               mtVar.bBigEndian = false;
+               
+            otherwise
+               error('MappedTensor:MachineFormat', ...
+                     '*** MappedTensor: Error: only ''ieee-be'' and ''ieee-le'' machine formats are supported.');
+         end
+         
          % - Initialise dimension order
          mtVar.vnDimensionOrder = 1:numel(vnTensorSize);
          
@@ -242,10 +269,10 @@ classdef MappedTensor < handle
          % - Delete the file, if a temporary file was created for this variable
          try
             % - Close the file handles
-            fclose(mtVar.hRealContent);
+            mtVar.hShimFunc('close', mtVar.hRealContent);
             
             if (mtVar.bIsComplex)
-               fclose(mtVar.hCmplxContent);
+               mtVar.hShimFunc('close', mtVar.hCmplxContent);
             end
 
             if (mtVar.bTemporary)
@@ -356,11 +383,11 @@ classdef MappedTensor < handle
          % - Reference the tensor data element
          if (mtVar.bIsComplex)
             % - Get the real and complex parts
-            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes), ...
-                             mtVar.fComplexFactor .* mt_read_data(mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes));
+            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian), ...
+                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian));
          else
             % - Just return the real part
-            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes);
+            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
          end
          
          % - Permute dimensions
@@ -400,12 +427,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor);
-            mt_write_data(mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian);
          end
       end
       
@@ -888,16 +915,16 @@ classdef MappedTensor < handle
             % - Handle a "slice assign" function with no input arguments efficiently
             if (nargin(fhFunction) == 0)
                tData = fhFunction();
-               mt_write_data_chunks(mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor);
+               mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                
             else
                % - Read source data, multiply by real factor
-               tData = mt_read_data_chunks(mtVar.hRealContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes);
+               tData = mtVar.hShimFunc('read_chunks', mtVar.hRealContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
                tData = tData .* mtVar.fRealFactor;
                
                % - Read complex part, if it exists
                if (mtVar.bIsComplex)
-                  tDataCmplx = mt_read_data_chunks(mtVar.hCmplxContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes);
+                  tDataCmplx = mtVar.hShimFunc('read_chunks', mtVar.hCmplxContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
                   tData = complex(tData, tDataCmplx .* mtVar.fComplexFactor);
                end
                
@@ -918,11 +945,11 @@ classdef MappedTensor < handle
                   end
                      
                   % - Write real and complex parts
-                  mt_write_data_chunks(mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, real(tData) ./ mtVar.fRealFactor);
-                  mt_write_data_chunks(mtNewVar.hCmplxContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, imag(tData) ./ mtVar.fComplexFactor);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, real(tData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hCmplxContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, imag(tData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
                else
                   % - Write real part
-                  mt_write_data_chunks(mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                end
             end
             
@@ -996,7 +1023,7 @@ classdef MappedTensor < handle
          mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
          
          % - open the file
-         mtVar.hCmplxContent = fopen(mtVar.strCmplxFilename, 'r+', 'MachineFormat', mtVar.strMachineFormat);
+         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
@@ -1112,7 +1139,7 @@ end
 %% Read / write functions
 
 % mt_read_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes)
+function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, bBigEndian)
    % - Check referencing and convert to linear indices
    [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
    
@@ -1123,12 +1150,12 @@ function [tData] = mt_read_data(hDataFile, sSubs, vnTensorSize, strClass, nHeade
    % - Split into readable chunks
    mnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
 
-   % - Call read function
-   tData = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes);
+   % - Call shim read function
+   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, bBigEndian);
 end
 
 % mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData)
+function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData, bBigEndian)
    % - Check referencing and convert to linear indices
    [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
    
@@ -1139,8 +1166,8 @@ function mt_write_data(hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, t
    % - Split into readable chunks
    mnFileChunkIndices = SplitFileChunks(vnUniqueIndices);   
    
-   % - Call writing function
-   mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
+   % - Call shim writing function
+   hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, cast(tData, strClass), bBigEndian);
 end
 
 % mt_read_data_chunks - FUNCTION Read data without sorting or checking indices
@@ -1310,6 +1337,58 @@ function [mnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
          
          % - Trim chunks
          mnFileChunkIndices = mnFileChunkIndices(1:nChunk-1, :);
+   end
+end
+
+function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
+   switch (strCommand)
+      case 'open'
+         if (nargin == 2)
+            [varargout{1}] = fopen(varargin{1}, 'r+');
+            [nul, nul, varargout{2}] = fopen(varargin{1}, 'r+');
+         else
+            varargout{1} = fopen(varargin{1}, 'r+', varargin{2});
+         end
+         
+      case 'close'
+         fclose(varargin{1});
+         
+      case 'read_chunks'
+         varargout{1} = mt_read_data_chunks(varargin{1:7});
+         
+      case 'write_chunks'
+         mt_write_data_chunks(varargin{1:7});
+   end
+end
+
+%% -- MEX-handling functions
+
+function [hShimFunc] = GetShimFunctionHandle
+   % - Does the compiled MEX function exist?
+   if (exist('mapped_tensor_shim') ~= 3) %#ok<EXIST>
+      try %#ok<TRYNC>
+         % - Move to the MappedTensor private directory
+         strMTDir = fileparts(which('MappedTensor'));
+         strCWD = cd(fullfile(strMTDir, 'private'));
+         
+         % - Try to compile the MEX function
+         mex('mapped_tensor_shim.c', '-largeArrayDims', '-O');
+         
+         % - MOve back to previous working directory
+         cd(strCWD);
+      end
+   end
+   
+   % - Did we succeed?
+   if (exist('mapped_tensor_shim') == 3) %#ok<EXIST>
+      hShimFunc = @mapped_tensor_shim;
+      
+   else
+      % - Just use the slow matlab version
+      warning('MappedTensor:MEXCompilation', ...
+         '--- MappedTensor: Could not compile MEX shim.  Using slow matlab version.');
+      
+      hShimFunc = @mapped_tensor_shim_nomex;
    end
 end
 
