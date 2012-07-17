@@ -55,16 +55,18 @@ wOld = warning('off', 'FocusStack:UnalignedStack');
 
 % - Extract each requested channel
 imRGB = zeros([vnFrameSize([2 1]) 3]);
-for (nChannel = vnChannels(:)')
-   % - Extract frame from the stack
-   if (isa(oStack, 'FocusStack'))
-      mfThisFrame = oStack.AlignedStack(:, :, nFrame, nChannel)';
-%       mfThisFrame = oStack.RawStack(:, :, nFrame, nChannel)';
-      mbDataMask = oStack.GetAlignedMask';
-   else
-      mfThisFrame = oStack(:, :, nFrame, nChannel)';
-      mbDataMask = true(size(mfThisFrame));
-   end
+
+% - Extract frame from the stack
+if (isa(oStack, 'FocusStack'))
+   tfFrame = oStack.AlignedStack(:, :, nFrame, vnChannels);
+   mbDataMask = oStack.GetAlignedMask';
+else
+   tfFrame = oStack.AlignedStack(:, :, nFrame, vnChannels);
+   mbDataMask = true([size(tfFrame, 1) size(tfFrame, 2)]);
+end
+
+for (nChannel = 1:numel(vnChannels))
+   mfThisFrame = tfFrame(:, :, 1, nChannel)';
    
    if (isa(oStack, 'FocusStack') && oStack.bConvertToDFF)
       % - Clip 1..2
