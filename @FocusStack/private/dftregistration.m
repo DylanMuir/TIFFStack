@@ -57,11 +57,16 @@ if usfac == 0,
 elseif usfac == 1,
     [m,n]=size(buf1ft);
     CC = ifft2(buf1ft.*conj(buf2ft));
-    [max1,loc1] = max(CC);
-    [max2,loc2] = max(max1);
-    rloc=loc1(loc2);
-    cloc=loc2;
-    CCmax=CC(rloc,cloc); 
+    
+    % Locate maximum
+    [CCmax, nMaxInd] = max(CC(:));
+    [rloc, cloc] = ind2sub([m n], nMaxInd);
+
+%     [max1,loc1] = max(CC);
+%     [max2,loc2] = max(max1);
+%     rloc=loc1(loc2);
+%     cloc=loc2;
+%     CCmax=CC(rloc,cloc); 
     rfzero = sum(abs(buf1ft(:)).^2)/(m*n);
     rgzero = sum(abs(buf2ft(:)).^2)/(m*n); 
     error = 1.0 - CCmax.*conj(CCmax)/(rgzero(1,1)*rfzero(1,1));
@@ -96,11 +101,11 @@ else
   
     % Compute crosscorrelation and locate the peak 
     CC = ifft2(ifftshift(CC)); % Calculate cross-correlation
-    [max1,loc1] = max(CC);
-    [max2,loc2] = max(max1);
-    rloc=loc1(loc2);cloc=loc2;
-    CCmax=CC(rloc,cloc);
     
+    % Locate maximum
+    [CCmax, nMaxInd] = max(CC(:));
+    [rloc, cloc] = ind2sub([m n], nMaxInd);
+
     % Obtain shift in original pixel grid from the position of the
     % crosscorrelation peak 
     [m,n] = size(CC); md2 = fix(m/2); nd2 = fix(n/2);
@@ -127,11 +132,12 @@ else
         % Matrix multiply DFT around the current shift estimate
         CC = conj(dftups_off(buf2ft.*conj(buf1ft),ceil(usfac*1.5),ceil(usfac*1.5),usfac,...
             dftshift-row_shift*usfac,dftshift-col_shift*usfac))/(md2*nd2*usfac^2);
-        % Locate maximum and map back to original pixel grid 
-        [max1,loc1] = max(CC);   
-        [max2,loc2] = max(max1); 
-        rloc = loc1(loc2); cloc = loc2;
-        CCmax = CC(rloc,cloc);
+
+         % Locate maximum and map back to original pixel grid 
+         % Locate maximum
+         [CCmax, nMaxInd] = max(CC(:));
+         [rloc, cloc] = ind2sub([m n], nMaxInd);
+
         rg00 = dftups_nooff(buf1ft.*conj(buf1ft),1,1,usfac)/(md2*nd2*usfac^2);
         rf00 = dftups_nooff(buf2ft.*conj(buf2ft),1,1,usfac)/(md2*nd2*usfac^2);  
         rloc = rloc - dftshift - 1;
