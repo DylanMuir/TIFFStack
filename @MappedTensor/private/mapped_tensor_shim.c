@@ -347,6 +347,10 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
 	for (uChunkElemIndex = 0; uChunkElemIndex < nNumUniqueElems; uChunkElemIndex++) {
 		dprintf("[%d]", (int) vfUniqueIndices[uChunkElemIndex]);
+      if (uChunkElemIndex > 20) {
+         dprintf("...");
+         break;
+      }
 	}
 	dprintf("\n");
 	
@@ -355,6 +359,10 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
 	for (uChunkElemIndex = 0; uChunkElemIndex < nNumUniqueElems; uChunkElemIndex++) {
 		dprintf("[%d]", (int) vfReverseSort[uChunkElemIndex]);
+      if (uChunkElemIndex > 20) {
+         dprintf("...");
+         break;
+      }
 	}
 	dprintf("\n");
 	
@@ -379,11 +387,14 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    uUniqueDataPtr = uUniqueData;
    
    for (nChunkIndex = 0; nChunkIndex < nNumChunks; nChunkIndex++) {
+      
+      dprintf("mts/crc: ------- Reading chunk.  UDP is [%p] (offset %ld)\n", uUniqueDataPtr, uUniqueDataPtr - uUniqueData);
+      
       // -- Get chunk info
 		uint64_t	uChunkStart, uChunkSkip, uChunkSize;
 		
 		vnSubs[0] = nChunkIndex; vnSubs[1] = 0;
-		uChunkStart = (uint64_t) mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] + uHeaderBytes - 1;
+		uChunkStart = (uint64_t) (mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] - 1) * nDataElemSize + uHeaderBytes;
 		
 		vnSubs[1] = 1;
 		uChunkSkip  = (uint64_t) mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)];
@@ -400,10 +411,13 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // - Read the data for this chunk
       if (uChunkSkip == 1) {
 			
+         int nRead;
+         
 			dprintf("mts/crc: Single-read chunk, [%ld] bytes\n", uChunkSize * nDataElemSize);
 			
          // - Read the data using a single read
-         if (fread((void *) uUniqueDataPtr, nDataElemSize, uChunkSize, hFile) != uChunkSize) {
+         if ((nRead = fread((void *) uUniqueDataPtr, nDataElemSize, uChunkSize, hFile)) != uChunkSize) {
+            dprintf("Read %d\n", nRead);
             if (ferror(hFile)) {
                errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
                          "Error on reading file.",
@@ -412,7 +426,9 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                
             } else if (feof(hFile)) {
                errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
-                         "Unexpected end of data file found when reading.", "");
+                         "Unexpected end of data file found when reading.",
+                         "Single-read chunk seek [%ld] bytes; skip [0] elements; read [%ld] elements (%ld bytes)\n", 
+                         uChunkStart, uChunkSize, uChunkSize * nDataElemSize);
                        
             } else {
                errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
@@ -423,9 +439,58 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
          // - Increment data pointer
          uUniqueDataPtr += nDataElemSize * uChunkSize;
          
+      } else if (uChunkSkip < 5) {
+         int nRead;
+         dprintf("mts/crc: Consolidated skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
+         
+         uint8_t  *vuConsolidatedData;
+         
+         if ((vuConsolidatedData = (uint8_t *) malloc(nDataElemSize * uChunkSize * uChunkSkip)) == NULL) {
+            errprintf("MappedTensor:mapped_tensor_shim:Memory",
+                      "Could not allocate consolidated read buffer.", "");
+         }
+         
+         if ((nRead = fread((void *) vuConsolidatedData, 1, nDataElemSize * uChunkSkip * uChunkSize, hFile)) < nDataElemSize * uChunkSkip * uChunkSize) {
+            dprintf("Read [%ld] bytes; expected [%ld] bytes; limit [%ld]\n", 
+                    nRead, nDataElemSize * uChunkSkip * uChunkSize,
+                    nDataElemSize * uChunkSkip * (uChunkSize-1) + nDataElemSize);
+            
+            // - We might get a short read if we're at the end of the file
+            if (nRead < nDataElemSize * uChunkSkip * (uChunkSize-1) + nDataElemSize) {  
+               if (ferror(hFile)) {
+                  errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
+                          "Error on reading file.",
+                          "Could not read from file.  Reason: [%s].\n",
+                          strerror(errno));
+                  
+               } else if (feof(hFile)) {
+               errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
+                         "Unexpected end of data file found when reading.",
+                         "Consolidated skip-read chunk seek [%ld] bytes; skip [%ld] elements; read [%ld] elements (%ld bytes)\n", 
+                         uChunkStart, uChunkSkip, uChunkSize, uChunkSize * nDataElemSize);
+                  
+               } else {
+                  errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
+                          "Unknown error on reading file.", "");
+               }
+            }
+         }
+         
+         // - Copy into unique data buffer
+         for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {
+            memcpy((void *) uUniqueDataPtr + (uElementIndex * nDataElemSize), vuConsolidatedData + (uElementIndex * nDataElemSize * uChunkSkip), nDataElemSize);
+         }
+         
+         // - Free buffer
+         free(vuConsolidatedData);
+         
+         // - Increment data pointer
+         uUniqueDataPtr = uUniqueDataPtr + uChunkSize * nDataElemSize * (uChunkSkip-1);
+         
+         
       } else {
       
-			dprintf("mts/crc: Skip-read: [%ld] bytes per element\n", uChunkSkip * nDataElemSize);
+			dprintf("mts/crc: Single-element skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
 			
          // - Read an element, then skip elements
          for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {
@@ -438,8 +503,10 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                           strerror(errno));
                   
                } else if (feof(hFile)) {
-                  errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
-                          "Unexpected end of data file found when reading.", "");
+               errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
+                         "Unexpected end of data file found when reading.",
+                         "Single skip-read chunk seek [%ld] bytes; skip [%ld] elements; read [1] elements (%ld bytes)\n", 
+                         uChunkStart, uChunkSkip, nDataElemSize);
                   
                } else {
                   errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
@@ -447,10 +514,11 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                }
             }
             
-				dprintf("mts/crc: Skipping [%ld] bytes\n", uChunkSkip * nDataElemSize);
-				
             // - Skip the required number of elements
-            fseek(hFile, uChunkSkip * nDataElemSize, SEEK_CUR);
+            if (uElementIndex < (uChunkSize-1)) {
+               dprintf("mts/crc: Skipping [%ld] bytes\n", (uChunkSkip-1) * nDataElemSize);
+               fseek(hFile, (uChunkSkip-1) * nDataElemSize, SEEK_CUR);
+            }
             
             // - Move to the next buffer element
             uUniqueDataPtr += nDataElemSize;
@@ -483,7 +551,6 @@ function [tData] = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIn
    
    % - Allocate data
    [nClassSize, strStorageClass] = ClassSize(strClass);
-   tData = zeros(vnDataSize, strStorageClass);
    vUniqueData = zeros(numel(vnUniqueIndices), 1, strStorageClass);
    
    % - Read data in chunks
@@ -600,6 +667,10 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
 	for (uChunkElemIndex = 0; uChunkElemIndex < nNumUniqueElems; uChunkElemIndex++) {
 		dprintf("[%d]", (int) vfUniqueIndices[uChunkElemIndex]);
+      if (uChunkElemIndex > 20) {
+         dprintf("...");
+         break;
+      }
 	}
 	dprintf("\n");
 		
@@ -612,6 +683,10 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	dprintf("mts/cwc: Reference data size: ");
 	for(uChunkElemIndex = 0; uChunkElemIndex < nNumDims; uChunkElemIndex++) {
 		dprintf("[%d]", vnDataSize[uChunkElemIndex]);
+      if (uChunkElemIndex > 20) {
+         dprintf("...");
+         break;
+      }
 	}
 	dprintf("\n");
 	
@@ -663,7 +738,7 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    for (uChunkIndex = 0; uChunkIndex < nNumChunks; uChunkIndex++) {
       // -- Get chunk info		
 		vnSubs[0] = uChunkIndex; vnSubs[1] = 0;
-		uChunkStart = (uint64_t) mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] + uHeaderBytes - 1;
+		uChunkStart = (uint64_t) (mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] - 1) * nDataElemSize + uHeaderBytes;
 		
 		vnSubs[1] = 1;
 		uChunkSkip  = (uint64_t) mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)];
@@ -674,12 +749,12 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // - Seek to the beginning of this chunk
       setFilePos(hFile, (fpos_T *) &uChunkStart);
       
-      dprintf("mts/cwc: Seeking to [%ld]\n", uChunkStart);
+      dprintf("mts/cwc: Seeking to [%ld] bytes\n", uChunkStart);
 		
 		// - Gather data for this chunk
 		if (!bScalarData) {
 			for (uChunkElemIndex = 0; uChunkElemIndex < uChunkSize; uChunkElemIndex++, uUniqueElemIndex++) {
-				memcpy((void *) (tuTargetData + uChunkElemIndex * nDataElemSize), (void *) uSourceData + (((uint64_t) (vfUniqueIndices[uUniqueElemIndex])) * nDataElemSize), nDataElemSize);
+				memcpy((void *) (tuTargetData + uChunkElemIndex * nDataElemSize), (void *) uSourceData + (((uint64_t) (vfUniqueIndices[uUniqueElemIndex]-1)) * nDataElemSize), nDataElemSize);
 			}
 		}
       
@@ -726,10 +801,10 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 					}
             }
             
-            // - Skip the required number of elements
-            fseek(hFile, uChunkSkip * nDataElemSize, SEEK_CUR);
+            // - Skip the required number of elements (one was already skipped due to the write above)
+            fseek(hFile, (uChunkSkip-1) * nDataElemSize, SEEK_CUR);
 				
-				dprintf("mts/cwc: Skip-write chunk: Skipping [%ld] bytes\n", uChunkSkip * nDataElemSize);
+				dprintf("mts/cwc: Skip-write chunk: Skipping over [%ld] bytes\n", (uChunkSkip-1) * nDataElemSize);
          }
       }
    }

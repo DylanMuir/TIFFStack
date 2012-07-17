@@ -157,7 +157,10 @@ classdef MappedTensor < handle
       nHeaderBytes = 0;       % The number of bytes to skip at the beginning of the file
       strMachineFormat;       % The desired machine format of the mapped file
       bBigEndian;             % Should the data be stored in big-endian format?
+
       hShimFunc;              % Handle to the (hopefully compiled) shim function
+      hRepSumFunc;            % Handle to the (hopefully compiled) repsum function
+      hChunkLengthFunc;       % Handle to the (hopefully compiled) chunk length function
    end
    
    methods
@@ -232,7 +235,9 @@ classdef MappedTensor < handle
          end
          
          % - Get a handle to the appropriate shim function
-         mtVar.hShimFunc = GetShimFunctionHandle;
+         [mtVar.hShimFunc, ...
+          mtVar.hRepSumFunc, ...
+          mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
          
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
@@ -383,11 +388,11 @@ classdef MappedTensor < handle
          % - Reference the tensor data element
          if (mtVar.bIsComplex)
             % - Get the real and complex parts
-            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian), ...
-                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian));
+            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
+                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
          else
             % - Just return the real part
-            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
+            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
          
          % - Permute dimensions
@@ -427,12 +432,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
-            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
       end
       
@@ -1139,32 +1144,32 @@ end
 %% Read / write functions
 
 % mt_read_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, bBigEndian)
+function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, bBigEndian, hRepSumFunc, hChunkLengthFunc)
    % - Check referencing and convert to linear indices
-   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
+   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize, hRepSumFunc);
    
    % - Maximise chunk probability and minimise number of reads by reading
    % only sorted unique entries
    [vnUniqueIndices, nul, vnReverseSort] = unique(vnLinearIndices);
    
    % - Split into readable chunks
-   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices);
+   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices, hChunkLengthFunc);
 
    % - Call shim read function
    tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, bBigEndian);
 end
 
 % mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData, bBigEndian)
+function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData, bBigEndian, hRepSumFunc, hChunkLengthFunc)
    % - Check referencing and convert to linear indices
-   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize);
+   [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize, hRepSumFunc);
    
    % - Maximise chunk probability and minimise number of writes by writing
    % only sorted unique entries
    [vnUniqueIndices, vnUniqueDataIndices] = unique(vnLinearIndices);
 
    % - Split into readable chunks
-   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices);   
+   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices, hChunkLengthFunc);   
    
    % - Call shim writing function
    hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, cast(tData, strClass), bBigEndian);
@@ -1178,7 +1183,6 @@ function [tData] = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIn
    
    % - Allocate data
    [nClassSize, strStorageClass] = ClassSize(strClass);
-   tData = zeros(vnDataSize, strStorageClass);
    vUniqueData = zeros(numel(vnUniqueIndices), 1, strStorageClass);
    
    % - Read data in chunks
@@ -1241,7 +1245,7 @@ function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices
 end
 
 % ConvertColonCheckLims - FUNCTION Convert colon referencing to subscript indices; check index limits
-function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
+function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, hRepSumFunc)
    % - Handle linear indexing
    if (numel(cRefs) == 1)
       vnLims = prod(vnLims);
@@ -1251,7 +1255,7 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
    for (nRefDim = numel(cRefs):-1:1) %#ok<FORPF>
       % - Convert colon references
       if (ischar(cRefs{nRefDim}) && isequal(cRefs{nRefDim}, ':'))
-         cCheckedRefs{nRefDim} = 1:vnLims(nRefDim);
+         cCheckedRefs{nRefDim} = ':';
          
       elseif (islogical(cRefs{nRefDim}))
          % - Logical referencing -- convert to indexed referencing
@@ -1276,24 +1280,65 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims)
    end
    
    % - Convert to linear indexing; work out data size
-   if (numel(cRefs) == 1)
-      vnLinearIndices = cCheckedRefs{1};
-      vnDataSize = size(cCheckedRefs{1});
-   else
-      cCheckedRefs = cellfun(@(c)c(:), cCheckedRefs, 'UniformOutput', false);
-      [cFullRefs{1:numel(cRefs)}] = ndgrid(cCheckedRefs{:});
-      vnLinearIndices = sub2ind(vnLims, cFullRefs{:});
-      vnDataSize = cellfun(@numel, cCheckedRefs);
-   end
+   [vnLinearIndices, vnDataSize] = GetLinearIndicesForRefs(cCheckedRefs, vnLims, hRepSumFunc);
    
    if (numel(vnDataSize) == 1)
       vnDataSize(2) = 1;
    end
 end
 
+% GetLinearIndicesForRefs - FUNCTION Convert a set of multi-dimensional indices directly into linear indices
+function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLims, hRepSumFunc)
+
+   % - Calculate dimension offsets
+   vnDimOffsets = [1 cumprod(vnLims)];
+   vnDimOffsets = vnDimOffsets(1:end-1);
+
+   % - Find colon references
+   vbIsColon = cellfun(@(c)(ischar(c) && isequal(c, ':')), cRefs);
+   nFirstNonColon = find(~vbIsColon, 1, 'first');
+   vbTrailingRefs = true(size(vbIsColon));
+   vbTrailingRefs(1:nFirstNonColon-1) = false;
+   vnDimRefSizes = cellfun(@numel, cRefs);
+   vnDimRefSizes(vbIsColon) = vnLims(vbIsColon);
+   
+   % - Remove trailing "1"s
+   vbOnes = cellfun(@(c)isequal(c, 1), cRefs);
+   nLastNonOne = find(~vbOnes, 1, 'last');
+   vbTrailingRefs((nLastNonOne+1):end) = false;
+
+   % - Work out how many linear indices there will be in total
+   nNumIndices = prod(vnDimRefSizes);
+   vnLinearIndices = zeros(nNumIndices, 1);
+   
+   % - Build a referencing window encompassing the leading colon refs (or
+   % first ref)
+   if (nFirstNonColon > 1)
+      vnLinearIndices(1:prod(vnLims(1:(nFirstNonColon-1)))) = 1:prod(vnLims(1:(nFirstNonColon-1)));
+   else
+      vnLinearIndices(1:vnDimRefSizes(1)) = cRefs{1};
+      vbTrailingRefs(1) = false;
+   end
+   
+   % - Replicate windows to make up linear indices
+   for (nDimension = find(vbTrailingRefs & ~vbOnes))
+      % - How long is the current window?
+      nCurrWindowLength = prod(vnDimRefSizes(1:(nDimension-1)));
+      nThisWindowLength = nCurrWindowLength * vnDimRefSizes(nDimension);
+      
+      % - Is this dimension a colon reference?
+      if (vbIsColon(nDimension))
+         vnLinearIndices(1:nThisWindowLength) = hRepSumFunc(vnLinearIndices(1:nCurrWindowLength), ((1:vnLims(nDimension))-1) * vnDimOffsets(nDimension));
+
+      else
+         vnLinearIndices(1:nThisWindowLength) = hRepSumFunc(vnLinearIndices(1:nCurrWindowLength), (cRefs{nDimension}-1) * vnDimOffsets(nDimension));
+      end
+   end
+end
+
 % SplitFileChunks - FUNCTION Split a set of indices into contiguous chunks
 % (with a consistent skip step within a chunk)
-function [mnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
+function [mnFileChunkIndices] = SplitFileChunks(vnLinearIndices, hChunkLengthFunc)
    % - Handle degenerate cases
    switch (numel(vnLinearIndices))
       case 1
@@ -1314,7 +1359,7 @@ function [mnFileChunkIndices] = SplitFileChunks(vnLinearIndices)
          nChunkAlloc = ceil(numel(vnLinearIndices)/2);
          mnFileChunkIndices = nan(nChunkAlloc, 3);
          while (nIndex <= numel(vnLinearIndices))
-            nChunkLength = find(vnDiffs(nIndex:end) ~= vnDiffs(nIndex), 1, 'first');
+            nChunkLength = hChunkLengthFunc(vnDiffs, nIndex) + 1;
             
             % - Fix up NaN skip
             if (isnan(vnDiffs(nIndex)))
@@ -1361,9 +1406,18 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
    end
 end
 
+function [vfDest] = mapped_tensor_repsum_nomex(vfSourceA, vfSourceB)
+   [mfA, mfB] = meshgrid(vfSourceB, vfSourceA);
+   vfDest = mfA(:) + mfB(:);
+end
+
+function [nChunkLength] = mapped_tensor_chunklength_nomex(vfDiffs, nIndex)
+   nChunkLength = find(vfDiffs(nIndex+1:end) ~= vfDiffs(nIndex), 1, 'first');
+end
+
 %% -- MEX-handling functions
 
-function [hShimFunc] = GetShimFunctionHandle
+function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
    % - Does the compiled MEX function exist?
    if (exist('mapped_tensor_shim') ~= 3) %#ok<EXIST>
       try %#ok<TRYNC>
@@ -1371,10 +1425,12 @@ function [hShimFunc] = GetShimFunctionHandle
          strMTDir = fileparts(which('MappedTensor'));
          strCWD = cd(fullfile(strMTDir, 'private'));
          
-         % - Try to compile the MEX function
+         % - Try to compile the MEX functions
          mex('mapped_tensor_shim.c', '-largeArrayDims', '-O');
+         mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
+         mex('mapped_tensor_chunklength.c', '-largeArrayDims', '-O');
          
-         % - MOve back to previous working directory
+         % - Move back to previous working directory
          cd(strCWD);
       end
    end
@@ -1382,13 +1438,17 @@ function [hShimFunc] = GetShimFunctionHandle
    % - Did we succeed?
    if (exist('mapped_tensor_shim') == 3) %#ok<EXIST>
       hShimFunc = @mapped_tensor_shim;
+      hRepSumFunc = @mapped_tensor_repsum;
+      hChunkLengthFunc = @mapped_tensor_chunklength;
       
    else
       % - Just use the slow matlab version
       warning('MappedTensor:MEXCompilation', ...
-         '--- MappedTensor: Could not compile MEX shim.  Using slow matlab version.');
+         '--- MappedTensor: Could not compile MEX functions.  Using slow matlab versions.');
       
       hShimFunc = @mapped_tensor_shim_nomex;
+      hRepSumFunc = @mapped_tensor_repsum_nomex;
+      hChunkLengthFunc = @mapped_tensor_chunklength_nomex;
    end
 end
 
