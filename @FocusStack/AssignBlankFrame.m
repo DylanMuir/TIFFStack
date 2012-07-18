@@ -61,15 +61,7 @@ if (isempty(oStack.mnAssignedBlankMeanFrames))
    oStack.mnAssignedBlankStdFrames = nan(vnStackSize(3:4));
 end
 
-% - Filter blank frame
-if (any(mfBlankFrame(:) < 2))
-   warning('FocusStack:FilteringBlankFrames', ...
-      '--- FocusStack/AssignBlankFrames: Warning: This blank frame required filtering.');
-   
-   % - Filter by clipping small values
-   mfBlankFrame(mfBlankFrame < 2) = 2;
-end
-
+% - Check for NaNs
 if (any(isnan(mfBlankFrame(:))) || (exist('mfStdFrame', 'var') && any(isnan(mfStdFrame(:)))))
    warning('FocusStack:BlankContainsNaN', ...
       '--- FocusStack/AssignBlankFrames: Warning: This blank frame contains NaNs, which can corrupt further processing.');

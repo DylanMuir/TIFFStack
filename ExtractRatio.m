@@ -53,8 +53,10 @@ fhExtractRatio = @(fsData, vnPixels, vnFrames)fhExtractRatioFun(fsData, vnPixels
       
       % - Calculate deltaR/R
       if (bUsedRR)
-         vfBlankTrace = nanmean(double(fsData.BlankFrames(vnPixels, vnFrames)), 1);
-         mfRawTrace = mfRawTrace ./ repmat(vfBlankTrace, size(mfRawTrace, 1), 1) - 1;
+         mfBlankTrace = double(fsData.BlankFrames(vnPixels, vnFrames));
+         mfRawTraceDRR = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
+         mfRawTraceDRR(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
+         mfRawTrace = mfRawTraceDRR;
       end
       
       vfRegionTrace = nanmean(mfRawTrace, 1);

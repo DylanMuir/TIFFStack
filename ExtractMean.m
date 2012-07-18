@@ -49,8 +49,7 @@ fhExtractMean = @(fsData, vnPixels, vnFrames)fhExtractMeanFun(fsData, vnPixels, 
       
       % - Calculate deltaF/F
       if (bUsedFF)
-         vfBlankTrace = nanmean(double(fsData.BlankFrames(vnPixels, vnFrames)), 1);
-         mfBlankTrace = repmat(vfBlankTrace, size(mfRawTrace, 1), 1);
+         mfBlankTrace = double(fsData.BlankFrames(vnPixels, vnFrames));
          mfRawTraceDFF = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
          mfRawTraceDFF(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
          mfRawTrace = mfRawTraceDFF;

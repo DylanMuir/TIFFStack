@@ -1,10 +1,11 @@
-function [hFigure] = PlayStack(oStack, vnChannels)
+function [hFigure] = PlayStack(oStack, vnChannels, vfDataRange)
 
 % PlayStack - FUNCTION Make a window to play or scrub through a stack
 %
-% Usage: [hFigure] = PlayStack(oStack, vnChannels)
+% Usage: [hFigure] = PlayStack(oStack, vnChannels, vfDataRange)
+%        [hFigure] = PlayStack(oStack, fhExtractionFunction, vfDataRange)
 %
-% 'oStack' is a 4D tensor (X Y nFrame nChannel)
+% 'oStack' is a 4D tensor (X Y nFrame nChannel) or a FocusStack object.
 %
 % Uses 'videofig' from Joo Filipe Henriques.
 
@@ -22,6 +23,25 @@ if (~exist('vnChannels', 'var') || isempty(vnChannels))
    vnChannels = 1;
 end
 
+if (isa(vnChannels, 'function_handle'))
+   if (~isa(oStack, 'FocusStack'))
+      disp('*** PlayStack: If an extraction function is provided, a FocusStack object must also be provided.')
+      return;
+   end
+   
+   fhExtractionFunc = vnChannels;
+else
+   if (isa(oStack, 'FocusStack'))
+      fhExtractionFunc = @(fsData, vnPixels, vnFrames)fsData.AlignedStack(vnPixels, vnFrames, vnChannels);
+   else
+      fhExtractionFunc = @(fsData, vnPixels, vnFrames)reshape(fsData(:, :, vnFrames, vnChannels), 1, [], numel(vnChannels));
+   end
+end
+
+if (~exist('vfDataRange', 'var'))
+   vfDataRange = [];
+end
+
 % -- Get stack parameters
 vnStackSize = size(oStack);
 nStackLength = vnStackSize(3);
@@ -33,8 +53,14 @@ else
    tFPS = [];
 end
 
+if (isa(oStack, 'FocusStack'))
+   mbAlignedMask = oStack.GetAlignedMask();
+else
+   mbAlignedMask = true(size(oStack, 1), size(oStack, 2));
+end
+
 % - Make a videofig and show the first frame
-fhRedraw = @(n)(PlotFrame(oStack, n, vnChannels, vnFrameSize, nStackLength));
+fhRedraw = @(n)(PlotFrame(oStack, n, fhExtractionFunc, vnFrameSize, nStackLength, mbAlignedMask, vfDataRange));
 hFigure = videofig(  nStackLength, ...
                      fhRedraw, ...
                      tFPS);
@@ -48,7 +74,7 @@ end
 
 % --- END of PlayStack FUNCTION ---
 
-function PlotFrame(oStack, nFrame, vnChannels, vnFrameSize, nStackLength)
+function PlotFrame(oStack, nFrame, fhExtractionFunc, vnFrameSize, nStackLength, mbDataMask, vfDataRange)
 
 % - Turn off "unaligned stack" warning
 wOld = warning('off', 'FocusStack:UnalignedStack');
@@ -57,15 +83,9 @@ wOld = warning('off', 'FocusStack:UnalignedStack');
 imRGB = zeros([vnFrameSize([2 1]) 3]);
 
 % - Extract frame from the stack
-if (isa(oStack, 'FocusStack'))
-   tfFrame = oStack.AlignedStack(:, :, nFrame, vnChannels);
-   mbDataMask = oStack.GetAlignedMask';
-else
-   tfFrame = oStack.AlignedStack(:, :, nFrame, vnChannels);
-   mbDataMask = true([size(tfFrame, 1) size(tfFrame, 2)]);
-end
+tfFrame = reshape(fhExtractionFunc(oStack, ':', nFrame), vnFrameSize(1), vnFrameSize(2), []);
 
-for (nChannel = 1:numel(vnChannels))
+for (nChannel = 1:size(tfFrame, 3))
    mfThisFrame = tfFrame(:, :, 1, nChannel)';
    
    if (isa(oStack, 'FocusStack') && oStack.bConvertToDFF)
@@ -74,17 +94,17 @@ for (nChannel = 1:numel(vnChannels))
    end
    
    % - Normalise frame within mask
-   if (isa(mfThisFrame, 'uint8'))
-      % - Dont normalise
-      
-%    elseif (isa(mfThisFrame, 'uint16'))
-%       % - Scale to [0..255]
-%       mfThisFrame = uint8(double(mfThisFrame) / 256);
-      
-   else
+   if (isempty(vfDataRange))
       mfThisFrame = double(mfThisFrame) - min(double(mfThisFrame(mbDataMask)));
       mfThisFrame = uint8(mfThisFrame ./ max(mfThisFrame(mbDataMask)) * 255);
       mfThisFrame(~mbDataMask) = 0;
+   else
+      mfThisFrame = double(mfThisFrame) - min(vfDataRange);
+      mfThisFrame = mfThisFrame ./ abs(diff(vfDataRange));
+      mfThisFrame(~mbDataMask) = 0;
+      mfThisFrame(mfThisFrame < 0) = 0;
+      mfThisFrame(mfThisFrame > 1) = 1;
+      mfThisFrame = uint8(mfThisFrame * 255);
    end
    
    % - Assign colour map
@@ -106,13 +126,12 @@ image(imRGB);
 axis tight equal off;
 
 % - Add some information
-strTitle = ['Channel(s) [' sprintf('%d,', vnChannels) '], '];
-strTitle = [strTitle sprintf('frame [%d] of [%d]', nFrame, nStackLength)];
-text(10, 10, strTitle, 'Color', 'white');
+strTitle = sprintf('Frame [%d] of [%d]', nFrame, nStackLength);
+text(5, 5, strTitle, 'Color', 'white');
 
 % - Add a scale bar
 if (isa(oStack, 'FocusStack') && ~isempty(oStack.fPixelsPerUM))
-   PlotScaleBar(oStack.fPixelsPerUM, 20, 'bl', 'w', 'LineWidth', 6);
+   PlotScaleBar(oStack.fPixelsPerUM, 50, 'bl', 'w', 'LineWidth', 6);
 end
 
 % - Restore warnings
