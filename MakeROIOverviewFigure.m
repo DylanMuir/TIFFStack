@@ -42,7 +42,6 @@ if (isa(fsData, 'double'))
    tfAvgSignal = fsData;
    vnStackSize = size(tfAvgSignal);
    vnStackSize = vnStackSize(1:2);
-   fPixPerUM = nan;
 else
    % - Get average frames
    strOldNorm = fsData.BlankNormalisation('none');
@@ -53,8 +52,12 @@ else
    fsData.BlankNormalisation(strOldNorm);
 end
 
-if (isempty(fPixPerUM))
+if (~exist('fPixPerUM', 'var') || isempty(fPixPerUM) && isa(fsData, 'FocusStack'))
    fPixPerUM = fsData.fPixelsPerUM;
+end
+
+if (~exist('fPixPerUM', 'var'))
+   fPixPerUM = nan;
 end
 
 

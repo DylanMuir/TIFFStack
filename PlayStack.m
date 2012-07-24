@@ -86,7 +86,7 @@ imRGB = zeros([vnFrameSize([2 1]) 3]);
 tfFrame = reshape(fhExtractionFunc(oStack, ':', nFrame), vnFrameSize(1), vnFrameSize(2), []);
 
 for (nChannel = 1:size(tfFrame, 3))
-   mfThisFrame = tfFrame(:, :, 1, nChannel)';
+   mfThisFrame = tfFrame(:, :, nChannel)';
    
    if (isa(oStack, 'FocusStack') && oStack.bConvertToDFF)
       % - Clip 1..2
