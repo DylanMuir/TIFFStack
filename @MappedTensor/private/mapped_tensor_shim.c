@@ -29,7 +29,7 @@
    #define  bool  uint8_t
    #define  true  1
    #define  false 0        
-   #define  UINT64_C c ## i64
+   #define  UINT64_C(c) c ## i64
 #else
    #define  FILE_FORCE_BINARY
 #endif
@@ -49,7 +49,7 @@
         
 // -- Case-insensitive string comparison
 
-#ifndef  strcasecmp
+#ifndef  strncasecmp
 	#define  strncasecmp  cmpstrni
  
    // cmpstrni - FUNCTION Case-insensitive string comparison
@@ -76,7 +76,7 @@
         
 void DisplayHelp();
 char *ReadStringArg(const mxArray *pmxaArg);
-mxClassID ClassIDForClassName(const char *strClassName);
+mxClassID ClassIDForClassName(const char *strClassName, size_t nLength);
 
 
 // -- Command function definitions
@@ -88,20 +88,20 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 
 // -- Endian-management functions
 
-inline void betoh16(uint16_t *vnData, uint64_t uNumEntries);
-inline void betoh32(uint32_t *vnData, uint64_t uNumEntries);
-inline void betoh64(uint64_t *vnData, uint64_t uNumEntries);
-inline void letoh16(uint16_t *vnData, uint64_t uNumEntries);
-inline void letoh32(uint32_t *vnData, uint64_t uNumEntries);
-inline void letoh64(uint64_t *vnData, uint64_t uNumEntries);
-inline void htobe16(uint16_t *vnData, uint64_t uNumEntries);
-inline void htobe32(uint32_t *vnData, uint64_t uNumEntries);
-inline void htobe64(uint64_t *vnData, uint64_t uNumEntries);
-inline void htole16(uint16_t *vnData, uint64_t uNumEntries);
-inline void htole32(uint32_t *vnData, uint64_t uNumEntries);
-inline void htole64(uint64_t *vnData, uint64_t uNumEntries);
+void betoh16(uint16_t *vnData, uint64_t uNumEntries);
+void betoh32(uint32_t *vnData, uint64_t uNumEntries);
+void betoh64(uint64_t *vnData, uint64_t uNumEntries);
+void letoh16(uint16_t *vnData, uint64_t uNumEntries);
+void letoh32(uint32_t *vnData, uint64_t uNumEntries);
+void letoh64(uint64_t *vnData, uint64_t uNumEntries);
+void htobe16(uint16_t *vnData, uint64_t uNumEntries);
+void htobe32(uint32_t *vnData, uint64_t uNumEntries);
+void htobe64(uint64_t *vnData, uint64_t uNumEntries);
+void htole16(uint16_t *vnData, uint64_t uNumEntries);
+void htole32(uint32_t *vnData, uint64_t uNumEntries);
+void htole64(uint64_t *vnData, uint64_t uNumEntries);
 
-void *GetEndianSwapper(int nDataElemSize, bool bBigEndian);
+void *GetEndianSwapper(size_t nDataElemSize, bool bBigEndian);
 
 // - Endian test
 const int16_t i = 1;
@@ -261,11 +261,11 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    int         nChunkIndex;
    mwSize      vnSubs[2];
    mxClassID   mxcDataClass;
-   uint64_t    uHeaderBytes, uElementIndex, uNumDataElems, uChunkIndex, uChunkElemIndex;
-   uint8_t     *uUniqueData, *uUniqueDataPtr, *tuTargetData;
+   uint64_t    uHeaderBytes, uElementIndex, uNumDataElems, uChunkStart, uChunkSkip, uChunkSize;
+   uint8_t     *uUniqueData, *uUniqueDataPtr, *tuTargetData, *vuConsolidatedData;
 	bool			bBigEndian;
 	void			(*pfEndianSwap)(void *, uint64_t);
-	
+   size_t      nRead;
    
    dprintf("mts/crc: Reading chunks\n");   
    
@@ -301,7 +301,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
    // - Get the data class
    strClass = ReadStringArg(prhs[6]);
-   mxcDataClass = ClassIDForClassName(strClass);
+   mxcDataClass = ClassIDForClassName(strClass, mxGetN(prhs[6]));
    
    // - Get the number of header bytes
    uHeaderBytes = (uint64_t) *mxGetPr(prhs[7]);
@@ -391,8 +391,6 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       dprintf("mts/crc: ------- Reading chunk.  UDP is [%p] (offset %ld)\n", uUniqueDataPtr, uUniqueDataPtr - uUniqueData);
       
       // -- Get chunk info
-		uint64_t	uChunkStart, uChunkSkip, uChunkSize;
-		
 		vnSubs[0] = nChunkIndex; vnSubs[1] = 0;
 		uChunkStart = (uint64_t) (mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] - 1) * nDataElemSize + uHeaderBytes;
 		
@@ -410,9 +408,6 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // - Read the data for this chunk
       if (uChunkSkip == 1) {
-			
-         int nRead;
-         
 			dprintf("mts/crc: Single-read chunk, [%ld] bytes\n", uChunkSize * nDataElemSize);
 			
          // - Read the data using a single read
@@ -440,10 +435,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
          uUniqueDataPtr += nDataElemSize * uChunkSize;
          
       } else if (uChunkSkip < 5) {
-         int nRead;
          dprintf("mts/crc: Consolidated skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
-         
-         uint8_t  *vuConsolidatedData;
          
          if ((vuConsolidatedData = (uint8_t *) malloc(nDataElemSize * uChunkSize * uChunkSkip)) == NULL) {
             errprintf("MappedTensor:mapped_tensor_shim:Memory",
@@ -478,7 +470,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
          
          // - Copy into unique data buffer
          for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {
-            memcpy((void *) uUniqueDataPtr + (uElementIndex * nDataElemSize), vuConsolidatedData + (uElementIndex * nDataElemSize * uChunkSkip), nDataElemSize);
+            memcpy((void *) (uUniqueDataPtr + (uElementIndex * nDataElemSize)), vuConsolidatedData + (uElementIndex * nDataElemSize * uChunkSkip), nDataElemSize);
          }
          
          // - Free buffer
@@ -624,7 +616,7 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
    // - Get the data class
    strClass = ReadStringArg(prhs[5]);
-   mxcDataClass = ClassIDForClassName(strClass);
+   mxcDataClass = ClassIDForClassName(strClass, mxGetN(prhs[5]));
    
    // - Get the number of header bytes
    uHeaderBytes = (uint64_t) *mxGetPr(prhs[6]);
@@ -754,7 +746,7 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		// - Gather data for this chunk
 		if (!bScalarData) {
 			for (uChunkElemIndex = 0; uChunkElemIndex < uChunkSize; uChunkElemIndex++, uUniqueElemIndex++) {
-				memcpy((void *) (tuTargetData + uChunkElemIndex * nDataElemSize), (void *) uSourceData + (((uint64_t) (vfUniqueIndices[uUniqueElemIndex]-1)) * nDataElemSize), nDataElemSize);
+				memcpy((void *) (tuTargetData + uChunkElemIndex * nDataElemSize), (void *) (uSourceData + (((uint64_t) (vfUniqueIndices[uUniqueElemIndex]-1)) * nDataElemSize)), nDataElemSize);
 			}
 		}
       
@@ -892,54 +884,54 @@ char *ReadStringArg(const mxArray *pmxaArg)
 	return strCommand;
 }
 
-mxClassID ClassIDForClassName(const char *strClassName)
+mxClassID ClassIDForClassName(const char *strClassName, size_t nLength)
 {
-   if (strcasecmp(strClassName, "cell") == 0) {
+   if (strncasecmp(strClassName, "cell", nLength) == 0) {
       return mxCELL_CLASS;
       
-   } else if (strcasecmp(strClassName, "char") == 0) {
+   } else if (strncasecmp(strClassName, "char", nLength) == 0) {
       return mxCHAR_CLASS;
       
-   } else if (strcasecmp(strClassName, "double") == 0) {
+   } else if (strncasecmp(strClassName, "double", nLength) == 0) {
       return mxDOUBLE_CLASS;
       
-   } else if (strcasecmp(strClassName, "function_handle") == 0) {
+   } else if (strncasecmp(strClassName, "function_handle", nLength) == 0) {
       return mxFUNCTION_CLASS;
       
-   } else if (strcasecmp(strClassName, "int8") == 0) {
+   } else if (strncasecmp(strClassName, "int8", nLength) == 0) {
       return mxINT8_CLASS;
       
-   } else if (strcasecmp(strClassName, "int16") == 0) {
+   } else if (strncasecmp(strClassName, "int16", nLength) == 0) {
       return mxINT16_CLASS;
          
-   } else if (strcasecmp(strClassName, "int32") == 0) {
+   } else if (strncasecmp(strClassName, "int32", nLength) == 0) {
       return mxINT32_CLASS;
       
-   } else if (strcasecmp(strClassName, "int64") == 0) {
+   } else if (strncasecmp(strClassName, "int64", nLength) == 0) {
       return mxINT64_CLASS;
       
-   } else if (strcasecmp(strClassName, "logical") == 0) {
+   } else if (strncasecmp(strClassName, "logical", nLength) == 0) {
       return mxLOGICAL_CLASS;
       
-   } else if (strcasecmp(strClassName, "single") == 0) {
+   } else if (strncasecmp(strClassName, "single", nLength) == 0) {
       return mxSINGLE_CLASS;
          
-   } else if (strcasecmp(strClassName, "struct") == 0) {
+   } else if (strncasecmp(strClassName, "struct", nLength) == 0) {
       return mxSTRUCT_CLASS;
       
-   } else if (strcasecmp(strClassName, "uint8") == 0) {
+   } else if (strncasecmp(strClassName, "uint8", nLength) == 0) {
       return mxUINT8_CLASS;
       
-   } else if (strcasecmp(strClassName, "uint16") == 0) {
+   } else if (strncasecmp(strClassName, "uint16", nLength) == 0) {
       return mxUINT16_CLASS;
       
-   } else if (strcasecmp(strClassName, "uint32") == 0) {
+   } else if (strncasecmp(strClassName, "uint32", nLength) == 0) {
       return mxUINT32_CLASS;
 
-   } else if (strcasecmp(strClassName, "uint64") == 0) {
+   } else if (strncasecmp(strClassName, "uint64", nLength) == 0) {
       return mxUINT64_CLASS;
         
-   } else if (strcasecmp(strClassName, "unknown") == 0) {
+   } else if (strncasecmp(strClassName, "unknown", nLength) == 0) {
       return mxUNKNOWN_CLASS;
       
    } else {
@@ -950,15 +942,15 @@ mxClassID ClassIDForClassName(const char *strClassName)
 
 // --- Endian managing functions
 
-inline uint16_t ByteSwap16(uint16_t *nData) {
+uint16_t ByteSwap16(uint16_t *nData) {
    *nData = ((*nData & 0xFF) << 8) | ((*nData & 0xFF00) >> 8);
 }
 
-inline uint32_t ByteSwap32(uint32_t *nData) {
+uint32_t ByteSwap32(uint32_t *nData) {
    *nData = ((*nData & 0xFF) << 24) | ((*nData & 0xFF00) << 8) | ((*nData & 0xFF0000) >> 8) | ((*nData & 0xFF000000) >> 24);
 }
 
-inline uint64_t ByteSwap64(uint64_t *nData)
+uint64_t ByteSwap64(uint64_t *nData)
 {
    *nData = 
    ((*nData &   UINT64_C(0x00000000000000FF)) << 56) |
@@ -995,67 +987,67 @@ void ByteSwapBuffer64(uint64_t *vnData, uint64_t uNumEntries) {
    }
 }
 
-inline void betoh16(uint16_t *vnData, uint64_t uNumEntries) {
+void betoh16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-inline void betoh32(uint32_t *vnData, uint64_t uNumEntries) {
+void betoh32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-inline void betoh64(uint64_t *vnData, uint64_t uNumEntries) {
+void betoh64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-inline void letoh16(uint16_t *vnData, uint64_t uNumEntries) {
+void letoh16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-inline void letoh32(uint32_t *vnData, uint64_t uNumEntries) {
+void letoh32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-inline void letoh64(uint64_t *vnData, uint64_t uNumEntries) {
+void letoh64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-inline void htobe16(uint16_t *vnData, uint64_t uNumEntries) {
+void htobe16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-inline void htobe32(uint32_t *vnData, uint64_t uNumEntries) {
+void htobe32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-inline void htobe64(uint64_t *vnData, uint64_t uNumEntries) {
+void htobe64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-inline void htole16(uint16_t *vnData, uint64_t uNumEntries) {
+void htole16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-inline void htole32(uint32_t *vnData, uint64_t uNumEntries) {
+void htole32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-inline void htole64(uint64_t *vnData, uint64_t uNumEntries) {
+void htole64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-void *GetEndianSwapper(int nDataElemSize, bool bBigEndian) {
+void *GetEndianSwapper(size_t nDataElemSize, bool bBigEndian) {
 	switch (nDataElemSize) {
 		case 1:
 			return NULL;
