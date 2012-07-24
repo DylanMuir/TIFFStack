@@ -821,6 +821,66 @@ classdef MappedTensor < handle
          end
       end
       
+      %% Overloaded MAX and MIN
+      
+      % max - METHOD Overloaded max function for usage "max(mtVar, ...)"
+      function [tfMax, tnMaxIndices] = max(mtVar, varargin)
+         % - Check arguments
+         if (nargin > 3)
+            error('MappedTensor:max:InvalidArguments', ...
+                  '*** MappedTensor/max: Too many arguments were provided.');
+         end
+         
+         % - Record stack size
+         vnSize = size(mtVar);
+         
+         % - Which dimension should we go along?
+         if (nargin < 3)
+            % - Find the first non-singleton dimension
+            [nul, nDim] = find(vnSize > 1, 1, 'first');
+         else
+            nDim = varargin{2};
+         end
+         
+         % - What sort of "max" are we performing?
+         if ((nargin == 1) || isempty(varargin{1}))
+            [tfMax, tnMaxIndices] = compare_single_tensor(mtVar, nDim, @max);
+            
+         else
+            % - One tensor and another scalar or tensor
+            [tfMax, tnMaxIndices] = compare_dual_tensor(mtVar, varargin{1}, nDim, @max);
+         end
+      end
+      
+      % min - METHOD Overloaded max function for usage "min(mtVar, ...)"
+      function [tfMax, tnMaxIndices] = min(mtVar, varargin)
+         % - Check arguments
+         if (nargin > 3)
+            error('MappedTensor:min:InvalidArguments', ...
+                  '*** MappedTensor/min: Too many arguments were provided.');
+         end
+         
+         % - Record stack size
+         vnSize = size(mtVar);
+         
+         % - Which dimension should we go along?
+         if (nargin < 3)
+            % - Find the first non-singleton dimension
+            [nul, nDim] = find(vnSize > 1, 1, 'first');
+         else
+            nDim = varargin{2};
+         end
+         
+         % - What sort of "min" are we performing?
+         if ((nargin == 1) || isempty(varargin{1}))
+            [tfMax, tnMaxIndices] = compare_single_tensor(mtVar, nDim, @min);
+            
+         else
+            % - One tensor and another scalar or tensor
+            [tfMax, tnMaxIndices] = compare_dual_tensor(mtVar, varargin{1}, nDim, @min);
+         end
+      end
+      
       %% SliceFunction - METHOD Execute a function on the entire tensor, in slices
       function [mtNewVar] = SliceFunction(mtVar, fhFunction, nSliceDim, vnSliceSize, varargin)
          % - Get tensor size
@@ -1140,6 +1200,136 @@ function [nBytes, strStorageClass] = ClassSize(strClass)
          error('MappedTensor:InvalidClass', '*** MappedTensor/ClassSize: Invalid class specifier.');
    end
 end
+
+% compare_single_tensor - FUNCTION Comparison function along a single tensor
+function [tfResult, tnIndices] = compare_single_tensor(mtVarA, nDim, fhCompare)
+   % - Determine size of slice
+   vnSliceSize = size(mtVarA);
+   vnSliceSize(nDim) = 1;
+   
+   % - Make a referencing structure
+   sSubs = substruct('()', [repmat({':'}, 1, numel(vnSliceSize))]);
+   sSubs.subs{nDim} = 1;
+   
+   % - Allocate initial slice
+   tfResult = subsref(mtVarA, sSubs);
+   tnIndices = ones(vnSliceSize);
+   
+   % - Find result by iterating over tensor
+   for (nSlice = 2:size(mtVarA, nDim))
+      % - Get this slice
+      sSubs.subs{nDim} = nSlice;
+      tfThisSlice = subsref(mtVarA, sSubs);
+      
+      % - Compare with current result
+      tfResult = fhCompare(tfThisSlice, tfResult);
+      
+      % - Which indices do we need to retain?
+      tbResetIndex = tfResult == tfThisSlice;
+      tnIndices(tbResetIndex) = nSlice;
+   end
+end
+
+% compare_dual_tensor - FUNCTION Comparison function between two tensors, or a tensor and scalar
+function [tfResult, tnIndices] = compare_dual_tensor(oVarA, oVarB, nDim, fhCompare)
+   % -- Check arguments
+
+   % - Make sure we have a double scalar
+   vbScalarArgs = false(1, 2);
+   if (isscalar(oVarA))
+      oVarA = double(oVarA);
+      vbScalarArgs(1) = true;
+   end
+   
+   if (isscalar(oVarB))
+      oVarB = double(oVarB);
+      vbScalarArgs(2) = true;
+   end
+   
+   % - Check sizes
+   if (~any(vbScalarArgs) && ~isequal(size(oVarA), size(oVarB)))
+      % - Both tensors must be the same size
+      error('MappedTensor:InvalidArguments', ...
+         '*** MappedTensor: First two arguments must either be scalar, or the same size.');
+   end
+   
+   % - How big will the result be?
+   if (all(vbScalarArgs))
+      % - Short-cut comparison
+      tfResult = fhCompare(oVarA, oVarB);
+      if (isequal(tfResult, oVarA))
+         tnIndices = 1;
+      else
+         tnIndices = 2;
+      end
+      
+      return;
+      
+   elseif (~vbScalarArgs(1))
+      vnResultSize = size(oVarA);
+      
+   else
+      vnResultSize = size(oVarB);
+   end
+   
+   vnSliceSize = vnResultSize;
+   vnSliceSize(nDim) = 1;
+   
+   % - Find the tensor and a scalar
+   if (nnz(vbScalarArgs) == 1)
+      if (~vbScalarArgs(1))
+         mtTensorA = oVarA;
+         fScalar = oVarB;
+         nTensorAInd = 1;
+         nTensorBInd = 2;
+      else
+         mtTensorA = oVarB;
+         fScalar = oVarA;
+         nTensorAInd = 2;
+         nTensorBInd = 1;
+      end
+      
+   else
+      % - Both are tensor args
+      mtTensorA = oVarA;
+      mtTensorB = oVarB;
+      nTensorAInd = 1;
+      nTensorBInd = 2;
+   end
+   
+   % - Allocate new tensors for the result and indices
+   tfResult = MappedTensor(vnResultSize);
+   tnIndices = MappedTensor(vnResultSize);
+   tnTheseIndices = nan(vnSliceSize);
+   
+   % - Make a referencing structure
+   sSubs = substruct('()', [repmat({':'}, 1, numel(vnResultSize))]);
+   
+   % -- Find result by iterating over tensor (A) slices
+   for (nSlice = 1:size(mtTensorA, nDim))
+      % - Get this slice
+      sSubs.subs{nDim} = nSlice;
+      tfThisSlice = subsref(mtTensorA, sSubs);
+      
+      % - Get the value(s) to compare
+      if (any(vbScalarArgs))
+         oCompare = fScalar;
+      else
+         oCompare = subsref(mtTensorB, sSubs);
+      end
+      
+      % - Perform the comparison and record the result
+      tfThisResult = fhCompare(tfThisSlice, oCompare);
+      subsasgn(tfResult, sSubs, tfThisResult);
+      
+      % - Record indices for this slice
+      tbAResult = tfThisSlice == tfThisResult;
+      tnTheseIndices(tbAResult) = nTensorAInd;
+      tnTheseIndices(~tbAResult) = nTensorBInd;
+      subsasgn(tnIndices, sSubs, tnTheseIndices);
+   end
+end
+
 
 %% Read / write functions
 
