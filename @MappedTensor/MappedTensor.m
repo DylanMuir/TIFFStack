@@ -1290,18 +1290,25 @@ end
 % GetLinearIndicesForRefs - FUNCTION Convert a set of multi-dimensional indices directly into linear indices
 function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLims, hRepSumFunc)
 
-   % - Calculate dimension offsets
-   vnDimOffsets = [1 cumprod(vnLims)];
-   vnDimOffsets = vnDimOffsets(1:end-1);
-
    % - Find colon references
    vbIsColon = cellfun(@(c)(ischar(c) && isequal(c, ':')), cRefs);
+   
+   if (all(vbIsColon))
+      vnLinearIndices = 1:prod(vnLims);
+      vnDimRefSizes = vnLims;
+      return;
+   end
+   
    nFirstNonColon = find(~vbIsColon, 1, 'first');
    vbTrailingRefs = true(size(vbIsColon));
    vbTrailingRefs(1:nFirstNonColon-1) = false;
    vnDimRefSizes = cellfun(@numel, cRefs);
    vnDimRefSizes(vbIsColon) = vnLims(vbIsColon);
    
+   % - Calculate dimension offsets
+   vnDimOffsets = [1 cumprod(vnLims)];
+   vnDimOffsets = vnDimOffsets(1:end-1);
+
    % - Remove trailing "1"s
    vbOnes = cellfun(@(c)isequal(c, 1), cRefs);
    nLastNonOne = find(~vbOnes, 1, 'last');
@@ -1426,6 +1433,7 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
          strCWD = cd(fullfile(strMTDir, 'private'));
          
          % - Try to compile the MEX functions
+         disp('--- MappedTensor: Compiling MEX functions.');
          mex('mapped_tensor_shim.c', '-largeArrayDims', '-O');
          mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
          mex('mapped_tensor_chunklength.c', '-largeArrayDims', '-O');
