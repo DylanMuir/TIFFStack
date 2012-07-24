@@ -104,7 +104,7 @@ else
     
     % Locate maximum
     [CCmax, nMaxInd] = max(CC(:));
-    [rloc, cloc] = ind2sub([m n], nMaxInd);
+    [rloc, cloc] = ind2sub([mlarge nlarge], nMaxInd);
 
     % Obtain shift in original pixel grid from the position of the
     % crosscorrelation peak 
@@ -136,7 +136,7 @@ else
          % Locate maximum and map back to original pixel grid 
          % Locate maximum
          [CCmax, nMaxInd] = max(CC(:));
-         [rloc, cloc] = ind2sub([m n], nMaxInd);
+         [rloc, cloc] = ind2sub(size(CC), nMaxInd);
 
         rg00 = dftups_nooff(buf1ft.*conj(buf1ft),1,1,usfac)/(md2*nd2*usfac^2);
         rf00 = dftups_nooff(buf2ft.*conj(buf2ft),1,1,usfac)/(md2*nd2*usfac^2);  
