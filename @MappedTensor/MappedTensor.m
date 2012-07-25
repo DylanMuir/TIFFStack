@@ -248,10 +248,10 @@ classdef MappedTensor < handle
             
          % - Check machine format
          switch (lower(mtVar.strMachineFormat))
-            case {'ieee-be'}
+            case {'ieee-be', 'ieee-be.l64'}
                mtVar.bBigEndian = true;
                
-            case {'ieee-le'}
+            case {'ieee-le', 'ieee-le.l64'}
                mtVar.bBigEndian = false;
                
             otherwise
