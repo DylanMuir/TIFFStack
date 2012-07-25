@@ -267,6 +267,10 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	void			(*pfEndianSwap)(void *, uint64_t);
    size_t      nRead;
    
+   #ifdef   DEBUG
+      uint64_t uChunkIndex, uChunkElemIndex;
+   #endif
+   
    dprintf("mts/crc: Reading chunks\n");   
    
    // -- Check arguments

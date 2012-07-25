@@ -112,11 +112,11 @@ function OpenFocusStack(oStack, strFullFilePath, strFilenameOnly, nFile) %#ok<IN
    if (isempty(oStack.fPixelsPerUM))
       oStack.fPixelsPerUM = sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor);
 
-   elseif (~isequal(oStack.fPixelsPerUM, sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor)))
+   elseif (~isequal(oStack.fPixelsPerUM, 2*sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor)))
       warning('FocusStack:DifferentZoom', ...
          '--- FocusStack/OpenFiles/OpenFocusStack: Raw file [%s] has a different zoom level than the stack (%dum vs %dum).', ...
          ['.../' strFilenameOnly], round(oStack.vnFrameSize(1) / oStack.fPixelsPerUM), ...
-         round(oStack.vnFrameSize(1) / (sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor))));
+         round(oStack.vnFrameSize(1) / (2*sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor))));
    end
 
    % - Set number of frames

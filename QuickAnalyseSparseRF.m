@@ -260,7 +260,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          vbBlockBlankFrames = vbBlockBlankStimFrames & vbUseFrame;
          
          tfBlankFrames = reshape(fhEF(fsStack, :, vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
-         mfThisBlankAvg = nanmedian(tfBlankFrames, 3);
+         mfThisBlankAvg = nanmean(tfBlankFrames, 3);
          
          % - Filter zeros, replace with NaN
          mfThisBlankAvg(mfThisBlankAvg == 0) = nan;
@@ -272,7 +272,10 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          fsStack.AssignBlankFrame(cat(3, mfThisBlankAvg, mfThisBlankStd), vbBlockFrames);
          
          % - Assign separate blank frames for each other stimulus segment
-         for (nStimSeqID = unique(vnStimulusSeqID))
+         vnStimSet = unique(vnStimulusSeqID);
+         vnStimSet = vnStimSet(~isnan(vnStimSet));
+         vnStimSet = setdiff(vnStimSet, 1);
+         for (nStimSeqID = vnStimSet)
             % - Find all frames for this presentation
             vbPresFrames = vbBlockFrames & (vnStimulusSeqID == nStimSeqID);
             
@@ -285,7 +288,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
             tfPresBlank = reshape(fhEF(fsStack, :, vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
             
             % - Assign the mean; Std.Dev is taken from block blank
-            fsStack.AssignBlankFrame(cat(3, nanmedian(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
+            fsStack.AssignBlankFrame(cat(3, nanmean(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
          end
       end
       
