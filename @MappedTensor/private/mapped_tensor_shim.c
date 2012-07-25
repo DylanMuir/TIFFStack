@@ -380,7 +380,12 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	
 	dprintf("mts/crc: Header bytes: [%ld]\n", uHeaderBytes);
 
-	dprintf("mts/crc: Is big endian: [%d]\n", bBigEndian);
+	dprintf("mts/crc: Data is big endian: [%d]\n", bBigEndian);
+   if (is_bigendian()) {
+      dprintf("mts/crc: System is big endian\n");
+   } else {
+      dprintf("mts/crc: System is little endian\n");
+   }
 	
 	dprintf("mts/crc: Allocated read buffer: [%d] elements, [%d] bytes per elelemt\n", nNumUniqueElems, nDataElemSize);	
 #endif
@@ -690,7 +695,12 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	
 	dprintf("mts/cwc: Header bytes: [%ld]\n", uHeaderBytes);
 	
-	dprintf("mts/cwc: Is big endian: [%d]\n", bBigEndian);
+	dprintf("mts/cwc: Data is big endian: [%d]\n", bBigEndian);
+   if (is_bigendian()) {
+      dprintf("mts/crc: System is big endian\n");
+   } else {
+      dprintf("mts/crc: System is little nedian\n");
+   }
 #endif
 	
    // - Check data and reference sizes

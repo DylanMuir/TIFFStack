@@ -1346,7 +1346,7 @@ function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strCl
    mnFileChunkIndices = SplitFileChunks(vnUniqueIndices, hChunkLengthFunc);
 
    % - Call shim read function
-   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, bBigEndian);
+   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, double(bBigEndian));
 end
 
 % mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
@@ -1362,7 +1362,7 @@ function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHea
    mnFileChunkIndices = SplitFileChunks(vnUniqueIndices, hChunkLengthFunc);   
    
    % - Call shim writing function
-   hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, cast(tData, strClass), bBigEndian);
+   hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, cast(tData, strClass), double(bBigEndian));
 end
 
 % mt_read_data_chunks - FUNCTION Read data without sorting or checking indices
