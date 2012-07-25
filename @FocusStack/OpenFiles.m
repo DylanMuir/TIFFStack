@@ -257,7 +257,7 @@ function OpenBinStack(oStack, strFullPath, strFilenameOnly, nFile)
    % - Construct BinStack
 %    oStack.vhMemMapFileHandles{nFile} = MappedTensor(oStack.cstrFilenames{nFile}, prod(oStack.vsHeaders.vnFrameSizePixels), oStack.vsHeaders.nNumFrames, 'Class', 'uint16');
    oStack.vhMemMapFileHandles{nFile} = ...
-      MappedTensor(  oStack.cstrFilenames{nFile}, [1 prod(oStack.vsHeaders.vnFrameSizePixels) oStack.vsHeaders.nNumFrames], ...
+      MappedTensor(  oStack.cstrFilenames{nFile}, [1 prod(oStack.vsHeaders(nFile).vnFrameSizePixels) oStack.vsHeaders(nFile).nNumFrames], ...
                      'Class', 'uint16', 'MachineFormat', 'ieee-be.l64');
 %    oStack.vhMemMapFileHandles{nFile} = MappedTensor(oStack.cstrFilenames{nFile}, 1, prod(oStack.vsHeaders.vnFrameSizePixels), oStack.vsHeaders.nNumFrames, 'Class', 'uint16');
 
@@ -298,11 +298,11 @@ function OpenBinStack(oStack, strFullPath, strFilenameOnly, nFile)
    if (isempty(oStack.fPixelsPerUM))
       oStack.fPixelsPerUM = sqrt(prod(sHeader.vnFrameSizePixels ./ (sHeader.vfFieldOfView * 1e6))) * sHeader.fZoomFactor;
 
-   elseif (~isequal(oStack.fPixelsPerUM, sqrt(prod(sHeader.vnFrameSizePixels ./ sHeader.vfFieldOfView * 1e6)) * sHeader.fZoomFactor))
+   elseif (~isequal(oStack.fPixelsPerUM, sqrt(prod(sHeader.vnFrameSizePixels ./ (sHeader.vfFieldOfView * 1e6))) * sHeader.fZoomFactor))
       warning('FocusStack:DifferentZoom', ...
          '--- FocusStack/OpenFiles/OpenBinStack: Raw file [%s] has a different zoom level than the stack (%dum vs %dum).', ...
          ['.../' strFilenameOnly], round(oStack.vnFrameSize(1) ./ oStack.fPixelsPerUM), ...
-         round(oStack.vnFrameSize(1) / sqrt(prod(sHeader.vnFrameSizePixels ./ sHeader.vfFieldOfView * 1e6)) * sHeader.fZoomFactor));
+         round(oStack.vnFrameSize(1) / sqrt(prod(sHeader.vnFrameSizePixels ./ (sHeader.vfFieldOfView * 1e6))) * sHeader.fZoomFactor));
    end
    
    % - Check number of channels
