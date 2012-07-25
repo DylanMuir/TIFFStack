@@ -100,6 +100,9 @@ else
    fhChannelFunc = @(t)nansum(t, 4);
 end
 
+if (~exist('vfSpatFreqCutoffCPUM', 'var') || isempty(vfSpatFreqCutoffCPUM))
+    vfSpatFreqCutoffCPUM = DEF_vfSpatFreqCutoffCPUM;
+end
 
 % -- Turn off data normalisation
 
@@ -113,7 +116,7 @@ end
 
 fSpatSamplingPPUM = 1;
 vnStimSize = size(tfStack);
-vnSFiltSize = 2.^ [nextpow2(vnStimSize(1)) nextpow2(vnStimSize(2)) nextpow2(vnStimSize(3))];
+vnSFiltSize = vnStimSize;%2.^ [nextpow2(vnStimSize(1)) nextpow2(vnStimSize(2)) nextpow2(vnStimSize(3))];
 vfxSFreq = ifftshift(fSpatSamplingPPUM .* ((-vnSFiltSize(1)/2) : (vnSFiltSize(1)/2-1)) ./ vnSFiltSize(1));
 vfySFreq = ifftshift(fSpatSamplingPPUM .* ((-vnSFiltSize(2)/2) : (vnSFiltSize(2)/2-1)) ./ vnSFiltSize(2));
 [mfYSFreq, mfXSFreq] = meshgrid(vfySFreq, vfxSFreq);
@@ -160,9 +163,9 @@ end
 
 % - Compute first frame FFT
 if (exist('mfReferenceImage', 'var') && ~isempty(mfReferenceImage))
-   mfFFTRegFrame = fft2(mfReferenceImage);
+   mfFFTRegFrame = fft2(mfReferenceImage, vnSFiltSize(1), vnSFiltSize(2));
 else
-   mfFFTRegFrame = fft2(nansum(tfWindow, 3));
+   mfFFTRegFrame = fft2(nansum(tfWindow, 3), vnSFiltSize(1), vnSFiltSize(2));
 end
 
 mfFFTRegFrame = mfFFTRegFrame .* mfSpatFilter;
@@ -177,13 +180,13 @@ for (nFrame = (nFirstFrame+1):nLastFrame)
    tfWindow(:, :, nWindowIndex) = fhChannelFunc(tfStack.ExtractFrames({':', ':', nFrame, vnChannel}));
    
    % - Compute the FFT for this window
-   mfFFTThisFrame = fft2(nansum(tfWindow, 3));
+   mfFFTThisFrame = fft2(nansum(tfWindow, 3), vnSFiltSize(1), vnSFiltSize(2));
 
    % - Perform a spatial band-pass filter on the frame
    mfFFTThisFrame = mfFFTThisFrame .* mfSpatFilter;
    
 %    figure(hFig);
-%    imagesc(ifft2(mfFFTThisFrame));
+%    imagesc(abs(ifft2(mfFFTThisFrame)));
 %    drawnow;
    
    % - Determine the registration
