@@ -48,16 +48,30 @@ elseif (~isempty(oStack.fPixelsPerUM))
    vfSpatFreqCutoffCPUM = vfSpatFreqCutoffCPUM ./ oStack.fPixelsPerUM;
 end
 
-% - Compute frame alignments
-mfFrameOffsets = GetStackAlignment( oStack, vnChannel, bProgressive, nUpsampling, ...
-                                    mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPUM);
-oStack.mfFrameShifts = mfFrameOffsets;
+% - Find trial starts and ends
+w = warning('off', 'FocusStack:IncompleteInformation');
+[nul, vnTrialIndex] = oStack.FrameStimulusInfo;
+nNumTrials = numel(oStack.cstrFilenames);
+mnTrialRanges = nan(nNumTrials, 2);
+
+for (nTrialIndex = 1:nNumTrials)
+   mnTrialRanges(nTrialIndex, :) = [find(vnTrialIndex == nTrialIndex, 1, 'first') find(vnTrialIndex == nTrialIndex, 1, 'last')];
+end
 
 % - Clear aligned frame cache
 oStack.vbCachedAlignedFrames = [];
 oStack.oAlignedFrameCache = [];
+oStack.mfFrameShifts = zeros(size(oStack, 3), 2);
+
+% - Compute frame alignments
+mfFrameOffsets = GetStackAlignment( oStack, vnChannel, bProgressive, nUpsampling, ...
+                                    mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPUM, ...
+                                    mnTrialRanges);
+oStack.mfFrameShifts = mfFrameOffsets;
+
 
 % - Restore dF/F convertion
 oStack.bConvertToDFF = bConvertToDFF;
+warning(w);
 
 % --- END of Align METHOD ---

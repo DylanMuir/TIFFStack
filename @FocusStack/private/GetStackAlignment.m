@@ -1,9 +1,9 @@
-function [mfFrameOffsets] = GetStackAlignment(tfStack, vnChannel, bProgressive, nUpsampling, mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPUM)
+function [mfFrameOffsets] = GetStackAlignment(tfStack, vnChannel, bProgressive, nUpsampling, mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPUM, mnTrialRanges)
 
 % GetStackAlignment - METHOD Compute registration for an image stack (possible sub-pixel resolution)
 %
-% Usage: [mfFrameOffsets] = GetStackAlignment(tfStack <, vnChannel, bProgressive, nUpsampling, mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPP>)
-%        [mfFrameOffsets] = GetStackAlignment(tfStack <, vnChannel, bProgressive, nUpsampling, nReferenceFrame, nWindowLength, vfSpatFreqCutoffCPP>)
+% Usage: [mfFrameOffsets] = GetStackAlignment(tfStack <, vnChannel, bProgressive, nUpsampling, mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPP, mnTrialRanges>)
+%        [mfFrameOffsets] = GetStackAlignment(tfStack <, vnChannel, bProgressive, nUpsampling, nReferenceFrame, nWindowLength, vfSpatFreqCutoffCPP, mnTrialRanges>)
 %        [mfFrameOffsets] = GetStackAlignment(tfStack <, cvnChannelComb, ...)
 %
 % 'tfStack' is either a tensor image stack [X Y F] or [X Y F C], where F is a
@@ -62,6 +62,7 @@ DEF_vnChannel = 1;
 DEF_bProgressive = false;
 DEF_nUpsampling = 1;
 DEF_vfSpatFreqCutoffCPUM = [0 inf];
+DEF_nWindowLength = 1;
 
 
 % -- Check arguments
@@ -86,6 +87,10 @@ if (~exist('nUpsampling', 'var') || isempty(nUpsampling))
    nUpsampling = DEF_nUpsampling;
 end
 
+if (~exist('nWindowLength', 'var') || isempty(nWindowLength))
+   nWindowLength = DEF_nWindowLength;
+end
+
 if (iscell(vnChannel))
    % - An arbitrary channel combination function was supplied
    fhChannelFunc = vnChannel{1};
@@ -102,6 +107,12 @@ end
 
 if (~exist('vfSpatFreqCutoffCPUM', 'var') || isempty(vfSpatFreqCutoffCPUM))
     vfSpatFreqCutoffCPUM = DEF_vfSpatFreqCutoffCPUM;
+end
+
+vfSpatFreqCutoffCPUM = sort(vfSpatFreqCutoffCPUM);
+
+if (~exist('mnTrialRanges', 'var') || isempty(mnTrialRanges))
+   mnTrialRanges = [1 size(tfStack, 3)];
 end
 
 % -- Turn off data normalisation
@@ -126,84 +137,95 @@ mfSpatFilter = false(vnSFiltSize(1:2));
 mfSpatFilter(sqrt((mfXSFreq.^2) + (mfYSFreq.^2)) >= vfSpatFreqCutoffCPUM(1)) = 1;
 mfSpatFilter(sqrt((mfXSFreq.^2) + (mfYSFreq.^2)) > vfSpatFreqCutoffCPUM(2)) = 0;
 
+% - Build window indices
+vnWindow = ceil(-(nWindowLength-1)/2):floor(nWindowLength/2);
+
 
 % -- Determine registration with dftregistration, for each frame
+
+% - Show some progress
+% hFig = figure;
+fprintf(1, 'Measuring stack alignment: %3d%%', 0);
 
 nNumFrames = size(tfStack, 3);
 mfFrameOffsets = zeros(nNumFrames, 2);
 
-% - Determine frame window for computing alignment
-vnWindow = ceil(-(nWindowLength-1)/2):floor(nWindowLength/2);
-nFirstFrame = 1-vnWindow(1);
-nLastFrame = size(tfStack, 3) - vnWindow(end);
+for (nTrial = 1:size(mnTrialRanges, 1))
 
-% - Make initial window
-tfWindow = fhChannelFunc(tfStack.ExtractFrames({':', ':', vnWindow + nFirstFrame, vnChannel}));
-nWindowIndex = 1;
-
-if (exist('mfReferenceImage', 'var') && ~isempty(mfReferenceImage))
-   if (isscalar(mfReferenceImage) && (mfReferenceImage > 0) && (mfReferenceImage < size(tfStack, 3)))
-      % - Assume it's a frame index, so extract the appropriate frame(s)
-      vnRefWindow = vnWindow + mfReferenceImage;
-      vnRefWindow = vnRefWindow(vnRefWindow >= 1);
-      vnRefWindow = vnRefWindow(vnRefWindow <= size(tfStack, 3));
-      mfReferenceImage = nansum(fhChannelFunc(tfStack.ExtractFrames({':', ':', vnRefWindow, vnChannel})), 3);
+   % - Determine frame window for computing alignment
+   nFirstFrame = mnTrialRanges(nTrial, 1) - vnWindow(1);
+   nLastFrame = mnTrialRanges(nTrial, 2) - vnWindow(end);
+   
+   % - Make initial window
+   tfWindow = fhChannelFunc(subsref(tfStack, substruct('()', {':', ':', vnWindow + nFirstFrame, vnChannel})));
+   nWindowIndex = 1;
+   
+   if (exist('mfReferenceImage', 'var') && ~isempty(mfReferenceImage))
+      if (isscalar(mfReferenceImage) && (mfReferenceImage > 0) && (mfReferenceImage < size(tfStack, 3)))
+         % - Assume it's a frame index, so extract the appropriate frame(s)
+         vnRefWindow = vnWindow + mfReferenceImage;
+         vnRefWindow = vnRefWindow(vnRefWindow >= 1);
+         vnRefWindow = vnRefWindow(vnRefWindow <= size(tfStack, 3));
+         mfReferenceImage = nansum(fhChannelFunc(subsref(tfStack, substruct('()', {':', ':', vnRefWindow, vnChannel}))), 3);
+         
+      else
+         if (bProgressive)
+            error('FocusStack:AlignInvalidArguments', '*** FocusStack/GetStackAlignment: Cannot provide a reference image for progressive alignment.');
+         end
+         
+         if (~isequal(size(mfReferenceImage), vnStackSize(1:2)))
+            error('FocusStack:InvalidReference', '*** FocusStack/GetStackAlignment: Reference image is the wrong size.');
+         end
+      end
+   end
+   
+   
+   % - Compute reference frame FFT, if necessary
+   if (~exist('mfFFTRegFrame', 'var'))
+      if (exist('mfReferenceImage', 'var') && ~isempty(mfReferenceImage))
+         mfFFTRegFrame = fft2(mfReferenceImage, vnSFiltSize(1), vnSFiltSize(2));
+      else
+         mfFFTRegFrame = fft2(nansum(tfWindow, 3), vnSFiltSize(1), vnSFiltSize(2));
+      end
+      mfFFTRegFrame = mfFFTRegFrame .* mfSpatFilter;
+   end
+   
+   for (nFrame = nFirstFrame:nLastFrame)
+      % - Build up window
+      tfWindow(:, :, nWindowIndex) = fhChannelFunc(subsref(tfStack, substruct('()', {':', ':', nFrame, vnChannel})));
       
-   else
+      % - Compute the FFT for this window
+      mfFFTThisFrame = fft2(nansum(tfWindow, 3), vnSFiltSize(1), vnSFiltSize(2));
+      
+      % - Perform a spatial band-pass filter on the frame
+      mfFFTThisFrame = mfFFTThisFrame .* mfSpatFilter;
+      
+%       figure(hFig);
+%       imagesc(abs(ifft2(mfFFTThisFrame)));
+%       drawnow;
+      
+      % - Determine the registration
+      [vOutput] = dftregistration(mfFFTRegFrame, mfFFTThisFrame, nUpsampling);
+      mfFrameOffsets(nFrame, :) = vOutput([4 3]);
+      
+      % - Record registration frame, if doing progressive alignment
       if (bProgressive)
-         error('FocusStack:AlignInvalidArguments', '*** FocusStack/GetStackAlignment: Cannot provide a reference image for progressive alignment.');
+         % - Register the next frame against this one
+         mfFFTRegFrame = mfFFTThisFrame;
       end
       
-      if (~isequal(size(mfReferenceImage), vnStackSize(1:2)))
-         error('FocusStack:InvalidReference', '*** FocusStack/GetStackAlignment: Reference image is the wrong size.');
-      end
+      % - Move to next window index
+      nWindowIndex = mod(nWindowIndex, nWindowLength) + 1;
+      
+      % - Show some progress
+      fprintf(1, '\b\b\b\b%3d%%', round(nFrame / nNumFrames * 100));
    end
-end
-
-
-% - Compute first frame FFT
-if (exist('mfReferenceImage', 'var') && ~isempty(mfReferenceImage))
-   mfFFTRegFrame = fft2(mfReferenceImage, vnSFiltSize(1), vnSFiltSize(2));
-else
-   mfFFTRegFrame = fft2(nansum(tfWindow, 3), vnSFiltSize(1), vnSFiltSize(2));
-end
-
-mfFFTRegFrame = mfFFTRegFrame .* mfSpatFilter;
-
-% - Show some progress
-fprintf(1, 'Measuring stack alignment: %3d%%', 0);
-
-% hFig = figure;
-
-for (nFrame = (nFirstFrame+1):nLastFrame)
-   % - Build up window
-   tfWindow(:, :, nWindowIndex) = fhChannelFunc(tfStack.ExtractFrames({':', ':', nFrame, vnChannel}));
+      
+   % - Align initial and final frames for this trial
+   mfFrameOffsets(mnTrialRanges(nTrial, 1):(nFirstFrame-1), 1) = mfFrameOffsets(nFirstFrame, 1);
    
-   % - Compute the FFT for this window
-   mfFFTThisFrame = fft2(nansum(tfWindow, 3), vnSFiltSize(1), vnSFiltSize(2));
-
-   % - Perform a spatial band-pass filter on the frame
-   mfFFTThisFrame = mfFFTThisFrame .* mfSpatFilter;
-   
-%    figure(hFig);
-%    imagesc(abs(ifft2(mfFFTThisFrame)));
-%    drawnow;
-   
-   % - Determine the registration
-   [vOutput] = dftregistration(mfFFTRegFrame, mfFFTThisFrame, nUpsampling);
-   mfFrameOffsets(nFrame, :) = vOutput([4 3]);
-
-   % - Record registration frame, if doing progressive alignment
-   if (bProgressive)
-      % - Register the next frame against this one
-      mfFFTRegFrame = mfFFTThisFrame;
-   end
-
-   % - Move to next window index
-   nWindowIndex = mod(nWindowIndex, nWindowLength) + 1;
-   
-   % - Show some progress
-   fprintf(1, '\b\b\b\b%3d%%', round(nFrame / nNumFrames * 100));
+   mfFrameOffsets(nLastFrame+1:mnTrialRanges(nTrial, 2), 1) = mfFrameOffsets(nLastFrame, 1);
+   mfFrameOffsets(nLastFrame+1:mnTrialRanges(nTrial, 2), 2) = mfFrameOffsets(nLastFrame, 2);
 end
 
 fprintf(1, '\n');
@@ -213,16 +235,12 @@ if (bProgressive)
    mfFrameOffsets = cumsum(mfFrameOffsets, 1);
 end
 
-% - Align initial and final frames
-mfFrameOffsets(1:(nFirstFrame-1), 1) = mfFrameOffsets(nFirstFrame, 1);
-
-mfFrameOffsets(nLastFrame+1:end, 1) = mfFrameOffsets(nLastFrame, 1);
-mfFrameOffsets(nLastFrame+1:end, 2) = mfFrameOffsets(nLastFrame, 2);
 
 % -- Restore data normalisation
 
 if (isa(tfStack, 'FocusStack'))
     tfStack.BlankNormalisation(strNormalisation);
+    tfStack.bSubtractBlack = bSubtractBlack;
 end
 
 % --- END of GetStackAlignemnt METHOD ---
