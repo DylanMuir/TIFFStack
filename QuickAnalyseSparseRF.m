@@ -70,7 +70,7 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
 
 %% -- Try to make a focus stack
 
-% try
+try
    % - Construct a stack
    disp('--- QuickAnalyseSparseRF: Creating FocusStack...');
    fsStack = FocusStack(cstrFilenames);
@@ -126,14 +126,15 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
       AssignBlank(fsStack, fhExtractionFunction);
    end
    
-% catch meErr
-%    - Try to save the stack, if possible
-%    if (exist('fsStack', 'var'))
-%       save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
-%    end
-%    
-%    rethrow(meErr);
-% end
+catch meErr
+   % - Try to save the stack, if possible
+   if (exist('fsStack', 'var'))
+      save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
+      fprintf('*** QuickAnalyseSparseRF: Saved stack to [%s]\n', strTempFilename);
+   end
+   
+   rethrow(meErr);
+end
 
 % fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
 % fsStack.fPixelsPerUM = 5;
@@ -161,6 +162,12 @@ nNumPixels = prod(size(fsStack, 1:2)); %#ok<PSIZE>
 sRegionsPlusNP = sRegions;
 % sRegionsPlusNP.NumObjects = sRegionsPlusNP.NumObjects+1;
 % sRegionsPlusNP.PixelIdxList = [{1:nNumPixels} sRegionsPlusNP.PixelIdxList];
+
+% - Mask off mis-aligned regions
+mbAlignedMask = fsStack.GetAlignedMask;
+for (nRegion = 1:sRegionsPlusNP.NumObjects)
+   sRegionsPlusNP.PixelIdxList{nRegion} = sRegionsPlusNP.PixelIdxList{nRegion}(mbAlignedMask(sRegionsPlusNP.PixelIdxList{nRegion}));
+end
 
 % - Save ROIs
 save(strTempFilename, 'sRegions', '-append');

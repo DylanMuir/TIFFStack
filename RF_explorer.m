@@ -195,7 +195,8 @@ axis(handles.ax2PImage, 'equal');
 set(handles.ax2PImage, 'Color', [0 0 0], 'XTick', [], 'YTick', []);
 
 % - Plot the receptive field for the selected ROIs
-handles.mfCurrRFImage = MakeRFImage(hObject, handles, vnLabelRegions);
+[mfCurrRFImage, handles] = MakeRFImage(hObject, handles, vnLabelRegions);
+handles.mfCurrRFImage = mfCurrRFImage;
 cla(handles.axRF);
 imagesc(handles.mfCurrRFImage', 'Parent', handles.axRF);
 axis(handles.axRF, 'equal', 'ij');
@@ -283,7 +284,6 @@ function tfOverviewImage = MakeOverviewImage(fsData)
 % - Get average frames
 strOldNorm = fsData.BlankNormalisation('none');
 tfAvgSignal = fsData.SummedAlignedFrames(:, :, :, :);
-vnStackSize = size(fsData, 1:2);
 fsData.BlankNormalisation(strOldNorm);
 
 % - Make an image
@@ -299,6 +299,10 @@ tfOverviewImage(:, :, 1) = tfOverviewImage(:, :, 1) ./ max(max(tfOverviewImage(:
 tfOverviewImage(:, :, 2) = tfAvgSignal(:, :, 1)' - min(min(tfAvgSignal(:, :, 1)));
 tfOverviewImage(:, :, 2) = tfOverviewImage(:, :, 2) ./ max(max(tfOverviewImage(:, :, 2)));
 tfOverviewImage(:, :, 3) = 0;
+
+% - Zero out mis-aligned pixels
+mbAlignedMask = fsData.GetAlignedMask;
+tfOverviewImage = tfOverviewImage .* repmat(mbAlignedMask, [1 1 3]);
 
 
 function [mfRFImage, handles] = MakeRFImage(hObject, handles, vnSelectedROIs, bSuppressProgress)
@@ -332,14 +336,11 @@ if (~isfield(handles, 'tfGaussian'))
    
    % - Pre-compute distance meshes and unitary Gaussians
    for (nStimID = prod(handles.vnNumPixels):-1:1)
-      tfDistanceMeshSqr(:, :, nStimID) = (handles.mfXMesh - handles.mfXStimCentreMesh(nStimID)).^2 + (handles.mfYMesh - handles.mfYStimCentreMesh(nStimID)).^2; %#ok<AGROW>
+      tfDistanceMeshSqr(:, :, nStimID) = (handles.mfXMesh - handles.mfXStimCentreMesh(nStimID)).^2 + (handles.mfYMesh - handles.mfYStimCentreMesh(nStimID)).^2;
    end
    
    fRFSigma = handles.fPixelSizeDeg/4 * 2;
-   handles.tfGaussian = exp(-1/(2*fRFSigma.^2) .* tfDistanceMeshSqr);
-   
-   % - Remove any NaNs
-   handles.tfGaussian(isnan(handles.tfGaussian)) = 0;
+   handles.tfGaussian = exp(-1/(2*fRFSigma.^2) .* tfDistanceMeshSqr);   
 end
 
 % - Iterate over ROIs and build up a Gaussian RF estimate
@@ -379,6 +380,11 @@ for (nROIIndex = 1:numel(vnSelectedROIs))
    end
    vfROIResponse = permute(vfROIResponse, [3 1 2]);
    
+   % - Remove NaNs and INFs
+   vfROIResponse(isnan(vfROIResponse)) = 0;
+   vfROIResponse(isinf(vfROIResponse)) = 0;
+   
+   % - Estimate RF
    mfRFImage = mfRFImage + sum(bsxfun(@times, handles.tfGaussian, vfROIResponse), 3) ./ numel(vnSelectedROIs);
    
    if (~bSuppressProgress)
@@ -403,7 +409,7 @@ guidata(hObject, handles);
 %% -- Callback functions
 
 % --- Executes on selection change in lbROIList.
-function lbROIList_Callback(hObject, eventdata, handles)
+function lbROIList_Callback(hObject, eventdata, handles) %#ok<*DEFNU>
 % hObject    handle to lbROIList (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -420,7 +426,6 @@ vfPosition(1:2) = 0;
 hBlankerAxes = axes('Units', get(handles.figRFExplorer, 'Units'), ...
                     'Position', vfPosition, 'Color', 'none', ...
                     'XTick', [], 'YTick', []);
-hPatch = patch([0 0 1 1 0], [0 1 1 0 0], [.5 .5 .5]);
 alpha(0.5);
 drawnow;
 
@@ -434,7 +439,7 @@ uicontrol(handles.lbROIList);
 
 
 % --- Executes during object creation, after setting all properties.
-function lbROIList_CreateFcn(hObject, eventdata, handles)
+function lbROIList_CreateFcn(hObject, eventdata, handles) %#ok<INUSD>
 % hObject    handle to lbROIList (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
