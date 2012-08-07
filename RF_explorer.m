@@ -301,7 +301,7 @@ tfOverviewImage(:, :, 2) = tfOverviewImage(:, :, 2) ./ max(max(tfOverviewImage(:
 tfOverviewImage(:, :, 3) = 0;
 
 
-function mfRFImage = MakeRFImage(hObject, handles, vnSelectedROIs, bSuppressProgress)
+function [mfRFImage, handles] = MakeRFImage(hObject, handles, vnSelectedROIs, bSuppressProgress)
 
 % - Defaults
 DEF_nRFSamplesPerDeg = 4;
@@ -337,6 +337,9 @@ if (~isfield(handles, 'tfGaussian'))
    
    fRFSigma = handles.fPixelSizeDeg/4 * 2;
    handles.tfGaussian = exp(-1/(2*fRFSigma.^2) .* tfDistanceMeshSqr);
+   
+   % - Remove any NaNs
+   handles.tfGaussian(isnan(handles.tfGaussian)) = 0;
 end
 
 % - Iterate over ROIs and build up a Gaussian RF estimate
@@ -376,7 +379,7 @@ for (nROIIndex = 1:numel(vnSelectedROIs))
    end
    vfROIResponse = permute(vfROIResponse, [3 1 2]);
    
-   mfRFImage = mfRFImage + nansum(bsxfun(@times, handles.tfGaussian, vfROIResponse), 3) ./ numel(vnSelectedROIs);
+   mfRFImage = mfRFImage + sum(bsxfun(@times, handles.tfGaussian, vfROIResponse), 3) ./ numel(vnSelectedROIs);
    
    if (~bSuppressProgress)
       fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]', nROIIndex / numel(vnSelectedROIs) * 100);
@@ -505,7 +508,7 @@ end
 % -- Create data for export
 
 sExport.vnSelectedROIs = vnSelectedROIs;
-sExport.mfRFImage = MakeRFImage(hObject, handles, sExport.vnSelectedROIs, bSuppressProgress);
+[sExport.mfRFImage, handles] = MakeRFImage(hObject, handles, sExport.vnSelectedROIs, bSuppressProgress);
 sExport.strRFDataDescription = handles.strRFDataDescription;
 sExport.tfOverviewImage = handles.tfOverviewImage;
 sExport.cstrFilenames = handles.fsStack.cstrFilenames;

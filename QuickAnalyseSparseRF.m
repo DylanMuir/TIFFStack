@@ -111,7 +111,7 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
    if (bAlign)
       disp('--- QuickAnalyseSparseRF: Aligning...');
       nAlignChannel = size(fsStack, 4);
-      fsStack.Align(nAlignChannel, false, 10, mfCustomAlignment);
+      fsStack.Align(nAlignChannel, false, 1, mfCustomAlignment);
    end
    
    % -- Assign black, if requested
@@ -242,7 +242,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
          vnStimulusSeqID, vtTimeInStimPresentation, ...
          nul, vbUseFrame] = ...
-         FrameStimulusInfo(fsStack, 1:size(fsStack, 3));
+         FrameStimulusInfo(fsStack, 1:size(fsStack, 3)); %#ok<SETNU>
       
       % - Turn off blank warning and unaligned warning
       wOld = warning('off', 'FocusStack:FilteringBlankFrames');
@@ -259,7 +259,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          vbBlockBlankStimFrames = vbBlockFrames & (vnStimulusSeqID == 1);
          vbBlockBlankFrames = vbBlockBlankStimFrames & vbUseFrame;
          
-         tfBlankFrames = reshape(fhEF(fsStack, :, vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
+         tfBlankFrames = reshape(fhEF(fsStack, 1:prod(size(fsStack, 1:2)), vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []); %#ok<PSIZE>
          mfThisBlankAvg = nanmean(tfBlankFrames, 3);
          
          % - Filter zeros, replace with NaN
@@ -285,7 +285,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
                (vtTimeInStimPresentation <= tPixelBlankTime);
             
             % - Extract these blank frames
-            tfPresBlank = reshape(fhEF(fsStack, :, vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
+            tfPresBlank = reshape(fhEF(fsStack, 1:prod(size(fsStack, 1:2)), vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []); %#ok<PSIZE>
             
             % - Assign the mean; Std.Dev is taken from block blank
             fsStack.AssignBlankFrame(cat(3, nanmean(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
