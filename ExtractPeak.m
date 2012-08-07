@@ -51,32 +51,82 @@ fhExtractionFun = @(fsData, vnPixels, vnFrames)fhExtractPeak(fsData, vnPixels, v
 
 % --- END of ExtractPeak.m ---
 
-   function [mfRawTrace, vfRegionTrace, fRegionResponse, nFramesInSample, vfPixelReponse] = fhExtractPeak(fsData, vnPixels, vnFrames, nSampleFrames, nChannel, bUsedFF)
+   function [cmfRawTrace, cvfRegionTrace, cfRegionResponse, cnFramesInSample, cvfPixelResponse] = ...
+         fhExtractPeak(fsData, cvnPixels, vnFrames, nSampleFrames, nChannel, bUsedFF)
       
-      mfRawTrace = double(fsData(vnPixels, vnFrames, nChannel));
+      if (~iscell(cvnPixels))
+         cvnPixels = {cvnPixels};
+      end
+      
+      nNumROIs = numel(cvnPixels);
+
+      % - Concatenate pixels to extract
+      cvnPixels = cellfun(@(c)(reshape(c, 1, [])), cvnPixels, 'UniformOutput', false);
+      vnROISizes = cellfun(@numel, cvnPixels);
+      mnROIBoundaries = [1 cumsum(vnROISizes)];
+      mnROIBoundaries = [mnROIBoundaries(1:end-1)' mnROIBoundaries(2:end)'];
+      vnExtractPixels = [cvnPixels{:}];
+
+      % - Extract data from stack
+      mfRawTrace = double(fsData(vnExtractPixels, vnFrames, nChannel));
       
       % - Calculate deltaF/F
       if (bUsedFF)
-         vfRegionBlankTrace = nanmean(fsData.BlankFrames(vnPixels, vnFrames), 1);
-         mfRawTrace = mfRawTrace ./ repmat(vfRegionBlankTrace, size(mfRawTrace, 1), 1) - 1;
+         mfBlankTrace = double(fsData.BlankFrames(vnExtractPixels, vnFrames));
+         mfRawTraceDFF = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
+         mfRawTraceDFF(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
+         mfRawTrace = mfRawTraceDFF;
       end
       
-      vfRegionTrace = nanmean(mfRawTrace, 1);
+      % - Extract regions
+      for (nROI = nNumROIs:-1:1)
+         vnThesePixels = mnROIBoundaries(nROI, 1):mnROIBoundaries(nROI, 2);
+         
+         cmfRawTrace{nROI} = mfRawTrace(vnThesePixels, :);
+         
+         if (nargout > 1)
+            cvfRegionTrace{nROI} = nanmean(cmfRawTrace{nROI}, 1);
+         end
+         
+         if (nargout > 2)
+            % - Locate peak
+            [nul, nPeakIndex] = nanmax(cvfRegionTrace{nROI});
+            
+            % - Average frames surrounding peak
+            vnWindow = (nPeakIndex - floor(nSampleFrames/2)):(nPeakIndex + ceil(nSampleFrames/2)-1);
+            vnWindow = vnWindow(vnWindow >= 1);
+            vnWindow = vnWindow(vnWindow <= numel(cvfRegionTrace{nROI}));
+            
+            cfRegionResponse{nROI} = nanmean(cvfRegionTrace{nROI}(vnWindow));
+         end
+         
+         if (nargout > 3)
+            cnFramesInSample{nROI} = numel(vnWindow);
+         end
+         
+         if (nargout > 4)
+            cvfPixelResponse{nROI} = nanmax(cmfRawTrace{nROI}, [], 2);
+         end
+      end
       
-      % - Locate peak
-      [nul, nPeakIndex] = nanmax(vfRegionTrace);
-      
-      % - Average five frames surrounding peak
-      vnWindow = (nPeakIndex - floor(nSampleFrames/2)):(nPeakIndex + ceil(nSampleFrames/2)-1);
-      vnWindow = vnWindow(vnWindow >= 1);
-      vnWindow = vnWindow(vnWindow <= numel(vfRegionTrace));
-      
-      fRegionResponse = nanmean(vfRegionTrace(vnWindow));
-      nFramesInSample = numel(vnWindow);
-      
-      if (nargout > 4)
-         vfPixelReponse = nanmax(mfRawTrace, [], 2);
+      if (nNumROIs == 1)
+         cmfRawTrace = cmfRawTrace{1};
+         
+         if (nargout > 1)
+            cvfRegionTrace = cvfRegionTrace{1};
+         end
+         
+         if (nargout > 2)
+            cfRegionResponse = cfRegionResponse{1};
+         end
+         
+         if (nargout > 3)
+            cnFramesInSample = cnFramesInSample{1};
+         end
+         
+         if (nargout > 4)
+            cvfPixelResponse = cvfPixelResponse{1};
+         end
       end
    end
-
 end
