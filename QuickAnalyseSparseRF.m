@@ -15,6 +15,12 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
 %                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
 %                               mfCustomAlignment, bOrderROIs, fhExtractionFunctionFunction)
+%
+% 'mfCustomAlignment' can be a matrix, in which case it is used as an image
+% against which to measure misalignment.  It can be a scalar, in which case
+% is is used as a frame index to extract a reference image from the stack.
+% Or is can be a function handle @(oStack)Align(oStack, params), which
+% computes misalignment on a FocusStack with arbitrary parameters.
 
 % -- Defaults
 
@@ -110,8 +116,13 @@ try
    % -- Align stack, if requested
    if (bAlign)
       disp('--- QuickAnalyseSparseRF: Aligning...');
-      nAlignChannel = size(fsStack, 4);
-      fsStack.Align(nAlignChannel, false, 1, mfCustomAlignment);
+      
+      if (isa(mfCustomAlignment, 'function_handle'))
+         fsStack.mfFrameOffsets = mfCustomAlignment(fsStack);
+      else         
+         nAlignChannel = size(fsStack, 4);
+         fsStack.Align(nAlignChannel, false, 1, mfCustomAlignment);
+      end
    end
    
    % -- Assign black, if requested

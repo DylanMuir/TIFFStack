@@ -4,6 +4,7 @@ function [mfFrameOffsets] = AlignTrials(oStack, vnChannel, nUpsampling, mfRefere
 %
 % Usage: [<mfFrameOffsets>] = AlignTrials(oStack <, vnChannel, nUpsampling, mfReferenceImage, vfSpatFreqCutoffCPUM>)
 %        [<mfFrameOffsets>] = AlignTrials(oStack <, vnChannel, nUpsampling, nReferenceFrame, vfSpatFreqCutoffCPUM>)
+%        [<mfFrameOffsets>] = AlignTrials(oStack <, vnChannel, nUpsampling, vnReferenceWindow, vfSpatFreqCutoffCPUM>)
 %
 % Each trial in 'oStack' will be aligned as a block, and the estimated
 % frame offsets returned in 'mfFrameOffsets'.  The alignment correction
@@ -42,8 +43,14 @@ if (~exist('mfReferenceImage', 'var'))
    % - Take the first trial as the reference
    mfReferenceImage = ExtractSummedFrames(oStack, {':', ':', vnBlockIndex == 1, vnChannel}, false) ./ nnz(vnBlockIndex == 1);
    nTrialStart = 2;
+   
 elseif (isscalar(mfReferenceImage))
    mfReferenceImage = oStack(:, :, mfReferenceImage, vnChannel);
+   nTrialStart = 1;
+   
+elseif (any(size(mfReferenceImage) == 1))
+   vnRefWindow = mfReferenceImage;
+   mfReferenceImage = ExtractSummedFrames(oStack, {':', ':', vnRefWindow, vnChannel}, false) ./ numel(mfReferenceImage);
    nTrialStart = 1;
 end
 
@@ -67,7 +74,16 @@ mfFrameOffsets = zeros(size(oStack, 3), 2);
 for (nTrialIndex = nTrialStart:numel(oStack.cstrFilenames))
    % - Average the frames for this trials
    vbThisBlock = vnBlockIndex == nTrialIndex;
-   mfTrialAverage = ExtractSummedFrames(oStack, {':', ':', vbThisBlock, vnChannel}, false) ./ nnz(vbThisBlock);
+   
+   if (exist('vnRefWindow', 'var'))
+      % - Use a referencing window
+      vnThisBlock = find(vbThisBlock);
+      vnThisWindow = vnThisBlock(vnRefWindow);
+      mfTrialAverage = ExtractSummedFrames(oStack, {':', ':', vnThisWindow, vnChannel}, false) ./ nnz(vbThisBlock);
+   else
+      % - Take the whole trials
+      mfTrialAverage = ExtractSummedFrames(oStack, {':', ':', vbThisBlock, vnChannel}, false) ./ nnz(vbThisBlock);
+   end
    
    % - Estimate the misalignemnt for this trial
    mfFrameOffsets(vbThisBlock, :) = ...
