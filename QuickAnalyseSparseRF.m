@@ -272,6 +272,10 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
       fsStack.BlankNormalisation('none');
       fhEF = fhExtractionFunction(false);
       
+      vnStimSet = unique(vnStimulusSeqID);
+      vnStimSet = vnStimSet(~isnan(vnStimSet));
+      vnStimSet = setdiff(vnStimSet, 1);
+      
       nProgress = 0;
       nProgressMax = numel(fsStack.cstrFilenames) * numel(vnStimSet);
       
@@ -296,9 +300,6 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          fsStack.AssignBlankFrame(cat(3, mfThisBlankAvg, mfThisBlankStd), vbBlockFrames);
          
          % - Assign separate blank frames for each other stimulus segment
-         vnStimSet = unique(vnStimulusSeqID);
-         vnStimSet = vnStimSet(~isnan(vnStimSet));
-         vnStimSet = setdiff(vnStimSet, 1);
          for (nStimSeqID = vnStimSet)
             % - Find all frames for this presentation
             vbPresFrames = vbBlockFrames & (vnStimulusSeqID == nStimSeqID);
