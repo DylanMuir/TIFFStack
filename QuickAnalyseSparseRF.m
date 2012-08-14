@@ -118,8 +118,9 @@ try
       disp('--- QuickAnalyseSparseRF: Aligning...');
       
       if (isa(mfCustomAlignment, 'function_handle'))
-         fsStack.mfFrameOffsets = mfCustomAlignment(fsStack);
-      else         
+         fsStack.mfFrameShifts = mfCustomAlignment(fsStack);
+      else
+          
          nAlignChannel = size(fsStack, 4);
          fsStack.Align(nAlignChannel, false, 1, mfCustomAlignment);
       end
@@ -271,6 +272,11 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
       fsStack.BlankNormalisation('none');
       fhEF = fhExtractionFunction(false);
       
+      nProgress = 0;
+      nProgressMax = numel(fsStack.cstrFilenames) * numel(vnStimSet);
+      
+      fprintf(1, 'Assigning blank: %6.2f%%', 0);
+      
       for (nBlock = 1:numel(fsStack.cstrFilenames)) %#ok<FORPF>
          % - Get the median blank frame for this block
          vbBlockFrames = vnBlockIndex == nBlock;
@@ -307,6 +313,9 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
             
             % - Assign the mean; Std.Dev is taken from block blank
             fsStack.AssignBlankFrame(cat(3, nanmean(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
+            
+            nProgress = nProgress + 1;
+            fprintf(1, '\b\b\b\b\b\b\b%6.2f%%', nProgress / nProgressMax * 100);
          end
       end
       
