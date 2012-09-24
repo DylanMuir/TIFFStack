@@ -37,7 +37,7 @@ end
 
 % -- Return function handle
 
-fhExtractRatio = @(fsData, vnPixels, vnFrames)fhExtractRatioFun(fsData, vnPixels, vnFrames, vnChannels, bUsedRR);
+fhExtractRatio = @(fsData, cvnPixels, vnFrames)fhExtractRatioFun(fsData, cvnPixels, vnFrames, vnChannels, bUsedRR);
 
 
 % --- END of ExtractRatio FUNCTION ---
@@ -69,7 +69,7 @@ fhExtractRatio = @(fsData, vnPixels, vnFrames)fhExtractRatioFun(fsData, vnPixels
       
       % - Calculate deltaR/R
       if (bUsedRR)
-         mfBlankTrace = double(fsData.BlankFrames(vnPixels, vnFrames));
+         mfBlankTrace = double(fsData.BlankFrames(vnExtractPixels, vnFrames));
          mfRawTraceDRR = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
          mfRawTraceDRR(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
          mfRawTrace = mfRawTraceDRR;
