@@ -48,8 +48,8 @@ fhExtractMean = @(fsData, vnPixels, vnFrames)fhExtractMeanFun(fsData, vnPixels, 
       % - Concatenate pixels to extract
       cvnPixels = cellfun(@(c)(reshape(c, 1, [])), cvnPixels, 'UniformOutput', false);
       vnROISizes = cellfun(@numel, cvnPixels);
-      mnROIBoundaries = [1 cumsum(vnROISizes)];
-      mnROIBoundaries = [mnROIBoundaries(1:end-1)' mnROIBoundaries(2:end)'];
+      mnROIBoundaries = [0 cumsum(vnROISizes)];
+      mnROIBoundaries = [mnROIBoundaries(1:end-1)'+1 mnROIBoundaries(2:end)'];
       vnExtractPixels = [cvnPixels{:}];
       
 %       if (numel(find(vnFrames)) == size(fsData, 3))
