@@ -27,6 +27,11 @@ for (nROIIndex = numel(cvsROIs):-1:1)
          mbThisMask = ellipse2mask('bounds', vnImageSize, sThisROI.vnRectBounds);
          sRegions.PixelIdxList{nROIIndex} = find(mbThisMask');
          
+      case {'polygon'; 'freehand'}
+         % - Draw a polygonal mask
+         mbThisMask = poly2mask(sThisROI.mnCoordinates(:, 1), sThisROI.mnCoordinates(:, 2), vnImageSize(1), vnImageSize(2));
+         sRegions.PixelIdxList{nROIIndex} = find(mbThisMask);
+         
       otherwise
          warning( 'ROIs2Regions:unsupported', ...
                   '--- ROIs2Regions: Warning: Unsupported ROI type.');
