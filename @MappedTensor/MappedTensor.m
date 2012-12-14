@@ -90,7 +90,7 @@
 %           length as in the original tensor 'mtVar'.
 %
 %           "Slice assign" operations can be performed by passing in a function
-%           than takes no input arguments for 'fhFunctionHandle'.
+%           that takes no input arguments for 'fhFunctionHandle'.
 %
 %           Note that due to Matlab not making available the number of
 %           return arguments that an anonymous function delivers, all
@@ -203,6 +203,11 @@ classdef MappedTensor < handle
          
          % - Filter out unneeded arguments
          varargin = varargin(vbKeepArg);
+         
+         % - Interpret an empty argument list as {1}
+         if (isempty(varargin))
+            varargin = {1};
+         end
          
          % - Get class information
          [mtVar.nClassSize, mtVar.strStorageClass] = ClassSize(mtVar.strClass);
@@ -941,31 +946,30 @@ classdef MappedTensor < handle
          % - Create a referencing window
          cvColons = repmat({':'}, 1, numel(vnTensorSize));
          cvColons{nSliceDim} = 1;
-         [vnLinearSourceWindow, vnSourceDataSize] = ConvertColonsCheckLims(cvColons, vnTensorSize);
+         [vnLinearSourceWindow, vnSourceDataSize] = ConvertColonsCheckLims(cvColons, vnTensorSize, mtVar.hRepSumFunc);
          
          cvTest = repmat({1}, 1, numel(vnTensorSize));
          cvTest{nSliceDim} = 2;
-         nTestIndex = ConvertColonsCheckLims(cvTest, vnTensorSize);
+         nTestIndex = ConvertColonsCheckLims(cvTest, vnTensorSize, mtVar.hRepSumFunc);
          nSourceWindowStep = nTestIndex - vnLinearSourceWindow(1);
          
          % - Split source window into readable chunks
-         cvnSourceChunkIndices = SplitFileChunks(vnLinearSourceWindow);
-
+         mnSourceChunkIndices = SplitFileChunks(vnLinearSourceWindow, mtVar.hChunkLengthFunc);
          
          if (bNewTensor)
             cvColons = repmat({':'}, 1, numel(vnNewTensorSize));
             cvColons{nSliceDim} = 1;
-            [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize);
+            [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize, mtVar.hRepSumFunc);
             
             cvTest = repmat({1}, 1, numel(vnTensorSize));
             cvTest{nSliceDim} = 2;
-            nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize);
+            nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize, mtVar.hRepSumFunc);
             nDestWindowStep = nTestIndex - vnLinearDestWindow(1);
             
             % - Split into readable chunks
-            cvnDestChunkIndices = SplitFileChunks(vnLinearDestWindow);
+            mnDestChunkIndices = SplitFileChunks(vnLinearDestWindow, mtVar.hChunkLengthFunc);
          else
-            cvnDestChunkIndices = cvnSourceChunkIndices;
+            mnDestChunkIndices = mnSourceChunkIndices;
             nDestWindowStep = nSourceWindowStep;
             vnDestDataSize = vnSourceDataSize;
          end
@@ -974,22 +978,22 @@ classdef MappedTensor < handle
          fprintf(1, '--- MappedTensor/SliceFunction: [%6.2f%%]', 0);
          for (nIndex = 1:vnTensorSize(nSliceDim))
             % - Get chunks for this indexing window
-            cvnTheseSourceChunks = cellfun(@(c)(increment_chunk(c, (nIndex-1) * nSourceWindowStep)), cvnSourceChunkIndices, 'UniformOutput', false);
-            cvnTheseDestChunks = cellfun(@(c)(increment_chunk(c, (nIndex-1) * nDestWindowStep)), cvnDestChunkIndices, 'UniformOutput', false);
+            mnTheseSourceChunks = bsxfun(@plus, mnSourceChunkIndices, [(nIndex-1) * nSourceWindowStep 0 0]);
+            mnTheseDestChunks = bsxfun(@plus, mnDestChunkIndices, [(nIndex-1) * nDestWindowStep 0 0]);
             
             % - Handle a "slice assign" function with no input arguments efficiently
             if (nargin(fhFunction) == 0)
                tData = fhFunction();
-               mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
+               mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                
             else
                % - Read source data, multiply by real factor
-               tData = mtVar.hShimFunc('read_chunks', mtVar.hRealContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
+               tData = mtVar.hShimFunc('read_chunks', mtVar.hRealContent, mnTheseSourceChunks, 1:prod(vnSourceDataSize), 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
                tData = tData .* mtVar.fRealFactor;
                
                % - Read complex part, if it exists
                if (mtVar.bIsComplex)
-                  tDataCmplx = mtVar.hShimFunc('read_chunks', mtVar.hCmplxContent, cvnTheseSourceChunks, 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
+                  tDataCmplx = mtVar.hShimFunc('read_chunks', mtVar.hCmplxContent, mnTheseSourceChunks, 1:prod(vnSourceDataSize), 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
                   tData = complex(tData, tDataCmplx .* mtVar.fComplexFactor);
                end
                
@@ -1010,22 +1014,17 @@ classdef MappedTensor < handle
                   end
                      
                   % - Write real and complex parts
-                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, real(tData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
-                  mtVar.hShimFunc('write_chunks', mtNewVar.hCmplxContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, imag(tData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, real(tData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hCmplxContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, imag(tData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
                else
                   % - Write real part
-                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, cvnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                end
             end
             
             fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]', nIndex / vnTensorSize(nSliceDim) * 100);
          end
          fprintf(1, '\b\b\b\b\b\b\b\b%6.2f%%]\n', 100);
-
-         % increment_chunk - helper function
-         function c = increment_chunk(c, nIncrement)
-            c{1} = c{1} + nIncrement;
-         end
       end
       
       
@@ -1208,7 +1207,7 @@ function [tfResult, tnIndices] = compare_single_tensor(mtVarA, nDim, fhCompare)
    vnSliceSize(nDim) = 1;
    
    % - Make a referencing structure
-   sSubs = substruct('()', [repmat({':'}, 1, numel(vnSliceSize))]);
+   sSubs = substruct('()', repmat({':'}, 1, numel(vnSliceSize)));
    sSubs.subs{nDim} = 1;
    
    % - Allocate initial slice
@@ -1303,7 +1302,7 @@ function [tfResult, tnIndices] = compare_dual_tensor(oVarA, oVarB, nDim, fhCompa
    tnTheseIndices = nan(vnSliceSize);
    
    % - Make a referencing structure
-   sSubs = substruct('()', [repmat({':'}, 1, numel(vnResultSize))]);
+   sSubs = substruct('()', repmat({':'}, 1, numel(vnResultSize)));
    
    % -- Find result by iterating over tensor (A) slices
    for (nSlice = 1:size(mtTensorA, nDim))
