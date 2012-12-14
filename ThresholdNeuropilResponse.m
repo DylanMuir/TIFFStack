@@ -5,6 +5,8 @@ function [sNeuropilZThresholds] = ...
 %
 % Usage: [sNeuropilZThresholds] = ...
 %    ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, nBlankStimID, fhExtractionFunction)
+% Usage: [sNeuropilZThresholds] = ...
+%    ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, vbBlankFrames, fhExtractionFunction)
 %
 % 'fsData' is a FocusStack object, with blank frames assigned.
 %
@@ -101,8 +103,11 @@ nNumNeuropilPixels = nnz(mbNeuropil);
 nNumStim = numel(vnUseStimulusSeqIDs);
 
 % -- Extract blank frames
-
-vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+if (~isscalar(nBlankStimID))
+   vbBlankFrames = nBlankStimID;
+else
+   vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+end
 
 [mfNeuropilBlankTrace] = fhExtractionFunction(fsData, mbNeuropil(:), vbBlankFrames);
 mfNeuropilBlankTrace = double(mfNeuropilBlankTrace);
