@@ -131,11 +131,18 @@ end
 vhFigures = [];
 
 if (exist('nLimitNumberOfCells', 'var') && ~isempty(nLimitNumberOfCells))
-   nNumRegions = min(nNumRegions, nLimitNumberOfCells);
+   if (isscalar(nLimitNumberOfCells))
+      vnRegions = 1:min(nNumRegions, nLimitNumberOfCells);
+      
+   else
+      vnRegions = nLimitNumberOfCells;
+   end
 end
 
 % - Loop over regions
+nNumRegions = numel(vnRegions);
 for (nRegion = 1:nNumRegions)
+   nRegionToPlot = vnRegions(nRegion);
    if (mod(nRegion-1, DEF_nNumResponsesPerFigure) == 0)
       vhFigures(end+1) = figure; %#ok<AGROW>
       set(gcf, 'Color', 'w');
@@ -145,8 +152,8 @@ for (nRegion = 1:nNumRegions)
    subplot(DEF_nNumResponsesPerFigure/2, DEF_nNumResponsesPerFigure/2, mod(nRegion-1, DEF_nNumResponsesPerFigure)+1);
    
    % - Determine plot limits
-   fYMin = min(mfRegionResponses(nRegion, :));
-   fYMax = max(mfRegionResponses(nRegion, :));
+   fYMin = min(mfRegionResponses(nRegionToPlot, :));
+   fYMax = max(mfRegionResponses(nRegionToPlot, :));
    vfYLims = [fYMin fYMax];
 
    % - Loop over stimulus segments
@@ -184,7 +191,7 @@ for (nRegion = 1:nNumRegions)
       for (nBlock = 1:nNumBlocks)
          % - Find frames corresponding to this stimulus ID in this block 
          vbStimBlockFrames = (vnStimulusSeqID == nStim) & (vnBlockIndex == nBlock);
-         vfThisTrialTrace = mfRegionResponses(nRegion, vbStimBlockFrames);
+         vfThisTrialTrace = mfRegionResponses(nRegionToPlot, vbStimBlockFrames);
          
          % - Find times to plot this response trace on
          vtThisPresTimes = vtStimulusBlockStartTimes(nStim) + vtTimeInStimPresentation(vbStimBlockFrames);
@@ -213,10 +220,11 @@ for (nRegion = 1:nNumRegions)
       end
       
       % - Plot the average fluorescence trace for the region
+      vbPlotTimePoints = vnNorm == max(vnNorm);
       nStimLength = numel(vfAvgStimTrace);
       vtThisStimTime = vtStimulusBlockStartTimes(nStim) + (0:nStimLength-1) * fsStack.tFrameDuration;
-      plot(vtThisStimTime(find(vnNorm == max(vnNorm))), vfAvgStimTrace(find(vnNorm == max(vnNorm)))...
-          ./ vnNorm(find(vnNorm == max(vnNorm))), 'Color', 0 * [1 1 1], 'LineWidth', 2);
+      plot(vtThisStimTime(vbPlotTimePoints), vfAvgStimTrace(vbPlotTimePoints)...
+          ./ vnNorm(vbPlotTimePoints), 'Color', 0 * [1 1 1], 'LineWidth', 2);
    end
    
    % - Get axis limits
@@ -253,7 +261,7 @@ for (nRegion = 1:nNumRegions)
 %    end
    
    set(gca, 'Color', 'none', 'YTick', [], 'LineWidth', 1, 'FontSize', 18);
-   ylabel(gca, nRegion, 'FontSize', 24);
+   ylabel(gca, nRegionToPlot, 'FontSize', 24);
    
    % - Add the annotation, if required
    if (exist('cstrAnnotation', 'var') && ~isempty(cstrAnnotation))
