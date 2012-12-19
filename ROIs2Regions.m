@@ -18,6 +18,7 @@ for (nROIIndex = numel(cvsROIs):-1:1)
          else
             % - Make a rectangular mask
             mbThisMask = false(vnImageSize);
+            sThisROI.vnRectBounds(find(sThisROI.vnRectBounds == 0)) = 1;
             mbThisMask(sThisROI.vnRectBounds(2):sThisROI.vnRectBounds(4), sThisROI.vnRectBounds(1):sThisROI.vnRectBounds(3)) = true;
             sRegions.PixelIdxList{nROIIndex} = find(mbThisMask);
          end
@@ -26,11 +27,6 @@ for (nROIIndex = numel(cvsROIs):-1:1)
          % - Draw an oval inside the bounding box
          mbThisMask = ellipse2mask('bounds', vnImageSize, sThisROI.vnRectBounds);
          sRegions.PixelIdxList{nROIIndex} = find(mbThisMask');
-         
-      case {'polygon'; 'freehand'}
-         % - Draw a polygonal mask
-         mbThisMask = poly2mask(sThisROI.mnCoordinates(:, 1), sThisROI.mnCoordinates(:, 2), vnImageSize(1), vnImageSize(2));
-         sRegions.PixelIdxList{nROIIndex} = find(mbThisMask);
          
       otherwise
          warning( 'ROIs2Regions:unsupported', ...

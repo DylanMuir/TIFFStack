@@ -17,20 +17,35 @@ bConvertToDFF = oStack.bConvertToDFF;
 oStack.bConvertToDFF = false;
 
 if (~exist('vnBlackPixels', 'var') || isempty(vnBlackPixels))
-   % - Try to average frames 2:11
-   vnFrameWindow = 2:(min(11, size(oStack, 3)));
+   % - Try to average frames 2:101
+   vnFrameWindow = 2:(min(101, size(oStack, 3)));
    if (isempty(vnFrameWindow))
       vnFrameWindow = 1;
    end
    
    % - Display the first stack frame
    hFigure = figure;
-   imagesc(nanmean(ExtractAlignedFrames(oStack, {':', ':', vnFrameWindow, nChannel}), 3)');
+   imAvg = nanmean(ExtractAlignedFrames(oStack, {':', ':', vnFrameWindow, nChannel}), 3)';
+   imagesc(imAvg);
    colormap gray;
    axis equal tight off;
+   [i,j]=find(GetAlignedMask(oStack));
+   fMin = min(min(imAvg(min(i):max(i), min(j):max(j))));
+   fMax = max(max(imAvg(min(i):max(i), min(j):max(j))));
+   caxis([fMin fMax]);
    
    % - Let the user define a circular ROI to specify black pixels
    [nul, vnBlackPixels] = circleroi();
+      
+   % - Make sure all pixels are within the aligned mask
+   nDelPix = 0;
+   mbAlignMask = oStack.GetAlignedMask;
+   for nPixel = 1:length(vnBlackPixels)
+      if ~mbAlignMask(vnBlackPixels(nPixel - nDelPix))
+         vnBlackPixels(nPixel - nDelPix) = [];
+         nDelPix = nDelPix + 1;
+      end
+   end
    
    % - Transpose X and Y pixels
    vnStackSize = size(oStack);

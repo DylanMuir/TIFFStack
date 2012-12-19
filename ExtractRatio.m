@@ -37,7 +37,7 @@ end
 
 % -- Return function handle
 
-fhExtractRatio = @(fsData, cvnPixels, vnFrames)fhExtractRatioFun(fsData, cvnPixels, vnFrames, vnChannels, bUsedRR);
+fhExtractRatio = @(fsData, vnPixels, vnFrames)fhExtractRatioFun(fsData, vnPixels, vnFrames, vnChannels, bUsedRR);
 
 
 % --- END of ExtractRatio FUNCTION ---
@@ -51,19 +51,11 @@ fhExtractRatio = @(fsData, cvnPixels, vnFrames)fhExtractRatioFun(fsData, cvnPixe
       
       nNumROIs = numel(cvnPixels);
 
-      % - Convert logical indexing to numerical indexing
-      vbIsLogical = cellfun(@islogical, cvnPixels);
-      cvnPixels(vbIsLogical) = cellfun(@(c)(find(c)), cvnPixels(vbIsLogical), 'UniformOutput', false);
-
-      if (islogical(vnFrames))
-         vnFrames = find(vnFrames);
-      end
-      
       % - Concatenate pixels to extract
       cvnPixels = cellfun(@(c)(reshape(c, 1, [])), cvnPixels, 'UniformOutput', false);
       vnROISizes = cellfun(@numel, cvnPixels);
-      mnROIBoundaries = [0 cumsum(vnROISizes)];
-      mnROIBoundaries = [mnROIBoundaries(1:end-1)'+1 mnROIBoundaries(2:end)'];
+      mnROIBoundaries = [1 cumsum(vnROISizes)];
+      mnROIBoundaries = [mnROIBoundaries(1:end-1)' mnROIBoundaries(2:end)'];
       vnExtractPixels = [cvnPixels{:}];
 
       % - Extract data from stack
@@ -77,7 +69,7 @@ fhExtractRatio = @(fsData, cvnPixels, vnFrames)fhExtractRatioFun(fsData, cvnPixe
       
       % - Calculate deltaR/R
       if (bUsedRR)
-         mfBlankTrace = double(fsData.BlankFrames(vnExtractPixels, vnFrames));
+         mfBlankTrace = double(fsData.BlankFrames(vnPixels, vnFrames));
          mfRawTraceDRR = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
          mfRawTraceDRR(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
          mfRawTrace = mfRawTraceDRR;

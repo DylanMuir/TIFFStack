@@ -95,7 +95,7 @@ vnBlockFrameIndices = vnFrameIndices;
 
 for (nBlock = 1:nNumBlocks)
    vbInBlock = vnFrameIndices <= sum(oStack.vnNumFrames(1:nBlock));
-   vbInBlock = vbInBlock & (vnFrameIndices >= sum(oStack.vnNumFrames(1:(nBlock-1))));
+   vbInBlock = vbInBlock & (vnFrameIndices > sum(oStack.vnNumFrames(1:(nBlock-1))));
    vnBlockIndex(vbInBlock) = nBlock; %#ok<AGROW>
    vnFrameInBlock(vbInBlock) = mod(vnFrameIndices(vbInBlock)-1, oStack.vnNumFrames(nBlock))+1; %#ok<AGROW>
    vnBlockFrameIndices(vbInBlock) = nan;

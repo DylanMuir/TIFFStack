@@ -45,14 +45,6 @@ fhExtractMean = @(fsData, vnPixels, vnFrames)fhExtractMeanFun(fsData, vnPixels, 
       
       nNumROIs = numel(cvnPixels);
       
-      % - Convert logical indexing to numerical indexing
-      vbIsLogical = cellfun(@islogical, cvnPixels);
-      cvnPixels(vbIsLogical) = cellfun(@(c)(find(c)), cvnPixels(vbIsLogical), 'UniformOutput', false);
-      
-      if (islogical(vnFrames))
-         vnFrames = find(vnFrames);
-      end
-      
       % - Concatenate pixels to extract
       cvnPixels = cellfun(@(c)(reshape(c, 1, [])), cvnPixels, 'UniformOutput', false);
       vnROISizes = cellfun(@numel, cvnPixels);
@@ -60,30 +52,29 @@ fhExtractMean = @(fsData, vnPixels, vnFrames)fhExtractMeanFun(fsData, vnPixels, 
       mnROIBoundaries = [mnROIBoundaries(1:end-1)'+1 mnROIBoundaries(2:end)'];
       vnExtractPixels = [cvnPixels{:}];
       
-%       if (numel(find(vnFrames)) == size(fsData, 3))
-%          for (nFrame = numel(vnFrames):-1:1)
-%             mfRawTrace(:, nFrame, 1) = double(fsData(vnPixels, vnFrames(nFrame), nChannel));
-%          end
-%       else
-         mfRawTrace = double(fsData(vnExtractPixels, vnFrames, nChannel));
-%       end
-      
-      % - Calculate deltaF/F
+      % - Extract data from stack
+      mfRawTrace = double(fsData(vnExtractPixels, vnFrames, nChannel));
       if (bUsedFF)
          mfBlankTrace = double(fsData.BlankFrames(vnExtractPixels, vnFrames));
-         mfRawTraceDFF = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
-         mfRawTraceDFF(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
-         mfRawTrace = mfRawTraceDFF;
       end
       
       % - Extract regions
       for (nROI = nNumROIs:-1:1)
          vnThesePixels = mnROIBoundaries(nROI, 1):mnROIBoundaries(nROI, 2);
+         vfThisRawTrace = nanmean(mfRawTrace(vnThesePixels, :), 1);
+         
+         % - Calculate deltaF/F
+         if (bUsedFF)
+            vfThisBlankTrace = nanmean(mfBlankTrace(vnThesePixels, :), 1);
+            vfThisRawTraceDFF = (vfThisRawTrace - vfThisBlankTrace) ./ vfThisBlankTrace;
+            vfThisRawTraceDFF(isnan(vfThisBlankTrace)) = vfThisRawTrace(isnan(vfThisBlankTrace));
+            vfThisRawTrace = vfThisRawTraceDFF;
+         end
          
          cmfRawTrace{nROI} = mfRawTrace(vnThesePixels, :);
          
          if (nargout > 1)
-            cvfRegionTrace{nROI} = nanmean(cmfRawTrace{nROI}, 1);
+            cvfRegionTrace{nROI} = vfThisRawTrace;
          end
          
          if (nargout > 2)
