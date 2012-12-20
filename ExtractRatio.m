@@ -51,6 +51,14 @@ fhExtractRatio = @(fsData, vnPixels, vnFrames)fhExtractRatioFun(fsData, vnPixels
       
       nNumROIs = numel(cvnPixels);
 
+      % - Convert logical indexing to numerical indexing
+      vbIsLogical = cellfun(@islogical, cvnPixels);
+      cvnPixels(vbIsLogical) = cellfun(@(c)(find(c)), cvnPixels(vbIsLogical), 'UniformOutput', false);
+
+      if (islogical(vnFrames))
+         vnFrames = find(vnFrames);
+      end
+      
       % - Concatenate pixels to extract
       cvnPixels = cellfun(@(c)(reshape(c, 1, [])), cvnPixels, 'UniformOutput', false);
       vnROISizes = cellfun(@numel, cvnPixels);
