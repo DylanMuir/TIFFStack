@@ -45,7 +45,7 @@ if (isa(fsData, 'double'))
 else
    % - Get average frames
    strOldNorm = fsData.BlankNormalisation('none');
-   tfAvgSignal = fsData.SummedAlignedFrames(:, :, :, vnChannels);
+   tfAvgSignal = fsData.SummedAlignedFrames(:, :, 1:100, vnChannels);
    vnStackSize = size(fsData, 1:2);
 
    % - Restore normalisation

@@ -1,9 +1,9 @@
-function [hFigure] = PlayStack(oStack, vnChannels, vfDataRange)
+function [hFigure] = PlayStack(oStack, vnChannels, vfDataRange, sRegions)
 
 % PlayStack - FUNCTION Make a window to play or scrub through a stack
 %
-% Usage: [hFigure] = PlayStack(oStack, vnChannels, vfDataRange)
-%        [hFigure] = PlayStack(oStack, fhExtractionFunction, vfDataRange)
+% Usage: [hFigure] = PlayStack(oStack, vnChannels, vfDataRange, sRegions)
+%        [hFigure] = PlayStack(oStack, fhExtractionFunction, vfDataRange, sRegions)
 %
 % 'oStack' is a 4D tensor (X Y nFrame nChannel) or a FocusStack object.
 %
@@ -21,6 +21,10 @@ end
 
 if (~exist('vnChannels', 'var') || isempty(vnChannels))
    vnChannels = 1;
+end
+
+if (~exist('sRegions', 'var') || isempty(sRegions))
+   sRegions = [];
 end
 
 if (isa(vnChannels, 'function_handle'))
@@ -60,7 +64,7 @@ else
 end
 
 % - Make a videofig and show the first frame
-fhRedraw = @(n)(PlotFrame(oStack, n, fhExtractionFunc, vnFrameSize, nStackLength, mbAlignedMask, vfDataRange));
+fhRedraw = @(n)(PlotFrame(oStack, n, fhExtractionFunc, vnFrameSize, nStackLength, mbAlignedMask, vfDataRange, sRegions));
 hFigure = videofig(  nStackLength, ...
                      fhRedraw, ...
                      tFPS);
@@ -74,7 +78,7 @@ end
 
 % --- END of PlayStack FUNCTION ---
 
-function PlotFrame(oStack, nFrame, fhExtractionFunc, vnFrameSize, nStackLength, mbDataMask, vfDataRange)
+function PlotFrame(oStack, nFrame, fhExtractionFunc, vnFrameSize, nStackLength, mbDataMask, vfDataRange, sRegions)
 
 % - Turn off "unaligned stack" warning
 wOld = warning('off', 'FocusStack:UnalignedStack');
@@ -132,6 +136,12 @@ text(5, 5, strTitle, 'Color', 'white');
 % - Add a scale bar
 if (isa(oStack, 'FocusStack') && ~isempty(oStack.fPixelsPerUM))
    PlotScaleBar(oStack.fPixelsPerUM, 50, 'bl', 'w', 'LineWidth', 6);
+end
+
+if (~isempty(sRegions))
+   hold on;
+   contour((labelmatrix(sRegions) > 0)', .5, 'LineWidth', 1);
+   hold off;
 end
 
 % - Restore warnings

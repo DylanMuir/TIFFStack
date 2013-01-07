@@ -3,7 +3,7 @@ function [vhFigures, mfRegionResponses] = ...
                                   mtStimLabelTimes, ...
                                   fDFFScaleBarLength, tTimeScaleBarLength, ...
                                   nLimitNumberOfCells, cstrAnnotation, ...
-                                  mbHighlightStims)
+                                  mbHighlightStims, nNumResponsesPerFigure)
 
 % PlotRegionResponses - FUNCTION Make a set of plots showing the response traces of identified regions
 %
@@ -12,7 +12,7 @@ function [vhFigures, mfRegionResponses] = ...
 %                                 <mtStimLabelTimes>, ...
 %                                 <fDFFScaleBarLength, tTimeScaleBarLength, ...
 %                                 nLimitNumberOfCells, cstrAnnotation, ...
-%                                 mbHighlightStims>)
+%                                 mbHighlightStims, nNumResponsesPerFigure>)
 %
 % If 'fsStack' is supplied, region traces will be extracted and returned in
 % 'mfRegionResponses'.  The traces for channel 1 only will be used.  The region
@@ -24,9 +24,16 @@ function [vhFigures, mfRegionResponses] = ...
 %
 % 'mtStimLabelTimes' is an optional parameter that specifies times to label for
 % each stimulus, if desired.  This is an Sx2 array.
+%
+% 'nLimitNumberOfCells' can be a scalar N, in which case regions 1:N will
+% be plotted.  'nLimitNumberOfCells' can be a vector vN, in which case the
+% each region in vN will be plotted in vN order.  If a single regions is
+% desired, 'nLimitNumberOfCells' must be a vector [n n], in which case
+% region 'n' will be plotted.
 
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 7th December, 2010
+
 
 % -- Defaults
 
@@ -44,6 +51,10 @@ end
 
 if (~exist('mbHighlightStims', 'var') || isempty(mbHighlightStims))
    mbHighlightStims = false(size(mfRegionResponses));
+end
+
+if (~exist('nNumResponsesPerFigure', 'var') || isempty(nNumResponsesPerFigure))
+   nNumResponsesPerFigure = DEF_nNumResponsesPerFigure;
 end
 
 % - Check that required stack data are present
@@ -134,22 +145,28 @@ if (exist('nLimitNumberOfCells', 'var') && ~isempty(nLimitNumberOfCells))
    if (isscalar(nLimitNumberOfCells))
       vnRegions = 1:min(nNumRegions, nLimitNumberOfCells);
       
+   elseif (numel(nLimitNumberOfCells) == 2) && (nLimitNumberOfCells(1) == nLimitNumberOfCells(2))
+      vnRegions = nLimitNumberOfCells(1);
    else
       vnRegions = nLimitNumberOfCells;
    end
+else
+   vnRegions = 1:sRegions.NumObjects;
 end
 
 % - Loop over regions
 nNumRegions = numel(vnRegions);
 for (nRegion = 1:nNumRegions)
    nRegionToPlot = vnRegions(nRegion);
-   if (mod(nRegion-1, DEF_nNumResponsesPerFigure) == 0)
+   if (mod(nRegion-1, nNumResponsesPerFigure) == 0)
       vhFigures(end+1) = figure; %#ok<AGROW>
       set(gcf, 'Color', 'w');
    end
    
    % - Create a subplot
-   subplot(DEF_nNumResponsesPerFigure/2, DEF_nNumResponsesPerFigure/2, mod(nRegion-1, DEF_nNumResponsesPerFigure)+1);
+   if (nNumResponsesPerFigure > 1)
+      subplot(nNumResponsesPerFigure/2, nNumResponsesPerFigure/2, mod(nRegion-1, nNumResponsesPerFigure)+1);
+   end
    
    % - Determine plot limits
    fYMin = min(mfRegionResponses(nRegionToPlot, :));
@@ -175,6 +192,7 @@ for (nRegion = 1:nNumRegions)
             vfColour = 0.8 * [1 1 1];
          end
          
+         % - Draw the stimulus shading
          hPatchStim = fill(vtStimTimes([1 1 2 2 1]), vfYLims([1 2 2 1 1]), vfColour);
          set(hPatchStim, 'LineStyle', 'none');
          hold on;
@@ -183,6 +201,8 @@ for (nRegion = 1:nNumRegions)
              set(hPatchAdapt, 'LineStyle', 'none');
          end
          
+         % - Mark the stimulus onset
+         plot(vtStimTimes([1 1]), vfYLims([1 2]), 'k-', 'LineWidth', 2);
       end      
       
       % - Plot individual trials for this stimulus
@@ -201,7 +221,7 @@ for (nRegion = 1:nNumRegions)
          end
          
          % - Plot this trial trace
-         plot(vtThisPresTimes, vfThisTrialTrace, 'Color', 0.6 * [1 1 1], 'LineWidth', 1);
+         plot(vtThisPresTimes, vfThisTrialTrace, 'Color', 0.5 * [1 1 1], 'LineWidth', 2);
          hold on;
             
          % - Accumulate stim traces
@@ -224,7 +244,7 @@ for (nRegion = 1:nNumRegions)
       nStimLength = numel(vfAvgStimTrace);
       vtThisStimTime = vtStimulusBlockStartTimes(nStim) + (0:nStimLength-1) * fsStack.tFrameDuration;
       plot(vtThisStimTime(vbPlotTimePoints), vfAvgStimTrace(vbPlotTimePoints)...
-          ./ vnNorm(vbPlotTimePoints), 'Color', 0 * [1 1 1], 'LineWidth', 2);
+          ./ vnNorm(vbPlotTimePoints), 'Color', 1 * [1 0 0], 'LineWidth', 4);
    end
    
    % - Get axis limits
@@ -242,12 +262,12 @@ for (nRegion = 1:nNumRegions)
    else
       vfBarLims = 0.8*max(vfYLims) + [-1 0] * 0.1;
    end
-   plot([tBarPos tBarPos], vfBarLims, 'k-', 'LineWidth', 5);
+   plot([tBarPos tBarPos], vfBarLims, 'k-', 'LineWidth', 8);
    
    % - Plot a time scale bar
    if (exist('tTimeScaleBarLength', 'var'))
       vfTBarLims = tBarPos + [0 tTimeScaleBarLength];
-      plot(vfTBarLims, vfBarLims([2 2]), 'k-', 'LineWidth', 5);
+      plot(vfTBarLims, vfBarLims([2 2]), 'k-', 'LineWidth', 8);
    end
    
    % - Set the plot properties

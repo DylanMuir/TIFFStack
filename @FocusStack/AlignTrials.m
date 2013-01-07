@@ -45,12 +45,18 @@ if (~exist('mfReferenceImage', 'var'))
    nTrialStart = 2;
    
 elseif (isscalar(mfReferenceImage))
+   % - Assume 'mfReferenceImage' is a frame reference
    mfReferenceImage = oStack(:, :, mfReferenceImage, vnChannel);
    nTrialStart = 1;
    
 elseif (any(size(mfReferenceImage) == 1))
+   % - Assume 'mfReferenceImage' is a list of frames to average for a reference image
    vnRefWindow = mfReferenceImage;
    mfReferenceImage = ExtractSummedFrames(oStack, {':', ':', vnRefWindow, vnChannel}, false) ./ numel(mfReferenceImage);
+   nTrialStart = 1;
+   
+else
+   % - Assume 'mfReferenceImage' is really an image to align to
    nTrialStart = 1;
 end
 
