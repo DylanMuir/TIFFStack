@@ -72,7 +72,7 @@ if (ischar(varargin{1}))
          load(varargin{1}, 'fsStack', 'vnNumPixels', 'fPixelOverlap', ...
             'fPixelSizeDeg', 'vfScreenSizeDeg', 'vfBlankStds', 'mfStimMeanResponses', ...
             'mfStimStds', 'mfRegionTraces', 'tfTrialResponses', 'tnTrialSampleSizes', ...
-            'sRegionsPlusNP', 'tBlankStimTime', 'mfStimZScores', 'tfBlankStdsCorr', ...
+            'sRegionsPlusNP', 'nBlankStimID', 'tBlankStimTime', 'mfStimZScores', 'tfBlankStdsCorr', ...
             'tfStimZScoresTrials');
          
       catch mErr
@@ -91,7 +91,7 @@ else
    
    [fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
       vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
-      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, tBlankStimTime, ...
+      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, nBlankStimID, tBlankStimTime, ...
       mfStimZScores, tfBlankStdsCorr, tfStimZScoresTrials] = varargin{:};
 end
 
@@ -108,6 +108,7 @@ handles.mfRegionTraces = mfRegionTraces;
 handles.tfTrialResponses = tfTrialResponses;
 handles.tnTrialSampleSizes = tnTrialSampleSizes;
 handles.sRegionsPlusNP = sRegionsPlusNP;
+handles.nBlankStimID = nBlankStimID;
 handles.tBlankStimTime = tBlankStimTime;
 handles.mfStimZScores = mfStimZScores;
 handles.tfBlankStdsCorr = tfBlankStdsCorr;
@@ -354,11 +355,14 @@ else
 end
 
 % - Get the responses
+vnUseStimIDs = 1:size(handles.mfStimZScores, 2);
+vnUseStimIDs = setdiff(vnUseStimIDs, handles.nBlankStimID);
+
 if (bUsedFF)
-   mfStimResp = handles.mfStimZScores;
+   mfStimResp = handles.mfStimZScores(:,vnUseStimIDs); % to check, was mfStimResp = handles.mfStimZScores(vnUseStimIDs,:);
    fThreshold = 3;
 else
-   mfStimResp = handles.mfStimMeanResponses;
+   mfStimResp = handles.mfStimMeanResponses(:,vnUseStimIDs);
    fThreshold = 0;
 end
 
@@ -372,12 +376,14 @@ end
 for (nROIIndex = 1:numel(vnSelectedROIs))
    % - Accumulate Gaussians over stimulus locations for this RF
    nROI = vnSelectedROIs(nROIIndex);
+%    
+%    if (handles.tBlankStimTime ~= 0)
+%       vfROIResponse = mfStimResp(nROI, 2:end); 
+%    else
+%       vfROIResponse = mfStimResp(nROI, :);
+%    end
    
-   if (handles.tBlankStimTime ~= 0)
-      vfROIResponse = mfStimResp(nROI, 2:end);
-   else
-      vfROIResponse = mfStimResp(nROI, :);
-   end
+   vfROIResponse = mfStimResp(nROI, :);
    vfROIResponse = permute(vfROIResponse, [3 1 2]);
    
    % - Remove NaNs and INFs
