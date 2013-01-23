@@ -92,7 +92,7 @@ end
 % - Assign stimulus sequence, if required
 if (exist('cvnForceStackSequenceIDs', 'var') && ~isempty(cvnForceStackSequenceIDs))
    if (~iscell(cvnForceStackSequenceIDs))
-      cvnForceStackSequenceIDs = repmat({cvnForceStackSequenceIDs}, numel(cstrFilenames), 1);
+      cvnForceStackSequenceIDs = repmat({cvnForceStackSequenceIDs}, numel(fsStack.cstrFilenames), 1);
    end
    
    fsStack.cvnSequenceIDs = cvnForceStackSequenceIDs;

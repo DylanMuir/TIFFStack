@@ -5,7 +5,7 @@ function [fig_handle, axes_handle, scroll_bar_handles, scroll_func] = ...
 %   VIDEOFIG(NUM_FRAMES, @REDRAW_FUNC)
 %   Creates a figure with a horizontal scrollbar and shortcuts to scroll
 %   automatically. The scroll range is 1 to NUM_FRAMES. The function
-%   REDRAW_FUNC(F) is called to redraw at scroll position F (for example,
+%   REDRAW_FUNC(F, hFigure, hAxis) is called to redraw at scroll position F (for example,
 %   REDRAW_FUNC can show the frame F of a video).
 %   This can be used not only to play and analyze standard videos, but it
 %   also lets you place any custom Matlab plots and graphics on top.
@@ -107,7 +107,8 @@ function [fig_handle, axes_handle, scroll_bar_handles, scroll_func] = ...
 	scroll_bar_handles = [scroll_axes_handle; scroll_handle];
 	scroll_func = @scroll;
 	
-	
+	% - Call redraw function for first frame
+   redraw_func(1, fig_handle, axes_handle);
 	
 	function key_press(src, event)  %#ok, unused arguments
 		switch event.Key,  %process shortcut keys
@@ -209,7 +210,7 @@ function [fig_handle, axes_handle, scroll_bar_handles, scroll_func] = ...
 		
 		%set to the right axes and call the custom redraw function
 		set(fig_handle, 'CurrentAxes', axes_handle);
-		redraw_func(f);
+		redraw_func(f, fig_handle, axes_handle);
 		
 		%used to be "drawnow", but when called rapidly and the CPU is busy
 		%it didn't let Matlab process events properly (ie, close figure).

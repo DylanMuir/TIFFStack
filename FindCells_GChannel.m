@@ -107,7 +107,7 @@ vnC = 1:size(fsData, 2);
 [mnR, mnC] = ndgrid(vnR, vnC);
 
 sCellRegions = [];
-mbAlignMask = fsData.GetAlignedMask;
+mbAlignMask = fsData.GetAlignedMask';
 
 for (nCell = 1:nNumCells)
    mnD = sqrt((mnR - mnCellLocs(nCell, 2)).^2 + (mnC - mnCellLocs(nCell, 1)).^2);
