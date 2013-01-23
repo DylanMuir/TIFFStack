@@ -1,6 +1,6 @@
 function [sRFAnalysis] = OfflineAnalysisSparseRF(cstrFilenames, ...
    vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
-   tPixelDuration, tBlankStimTime, ...
+   tPixelDuration, nBlankStimID, tBlankStimTime, ...
    bAlign, bAssignBlack, bAssignBlank, ...
    tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
    mfCustomAlignment, fhExtractionFunction)
@@ -11,7 +11,7 @@ function [sRFAnalysis] = OfflineAnalysisSparseRF(cstrFilenames, ...
 %
 % Usage: [sRFAnalysis] = OfflineAnalysisSparseRF(  cstrFilenames, ...
 %                               vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
-%                               tPixelDuration, tBlankStimTime, ...
+%                               tPixelDuration, nBlankStimID, tBlankStimTime, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
 %                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
 %                               mfCustomAlignment, fhExtractionFunctionFunction)
@@ -29,6 +29,8 @@ DEF_bAssignBlack = false;
 DEF_bAssignBlank = false;
 DEF_mfCustomAlignment = 10;
 DEF_bOrderROIs = true;
+
+fUsePreStimBlankProportion = 0.5;
 
 %% -- Check arguments, assign defaules
 
@@ -100,23 +102,25 @@ end
 
 tPixelBlankTime = fsStack.tBlankTime;
 
-% - Assign stimulus durations
-vtStimDurations = repmat(tPixelBlankTime + tPixelDuration, prod(vnNumPixels), 1);
+% - Assign stimulus durations and "use data" times
+nNumStimuli = prod(vnNumPixels) + ~isempty(nBlankStimID);
 
-if (~isempty(tBlankStimTime) && (tBlankStimTime ~= 0))
-   vtStimDurations = [tBlankStimTime; vtStimDurations];
+vtStimulusDurations = repmat(tPixelDuration + tPixelBlankTime, nNumStimuli, 1);
+mtStimulusUseTimes = repmat(tPixelBlankTime + [0 tPixelDuration], nNumStimuli, 1);
+mtStimLabelTimes = repmat(tPixelBlankTime + [0 tPixelDuration], nNumStimuli, 1);
+mtBlankTimes = repmat(tPixelBlankTime * [fUsePreStimBlankProportion 1], nNumStimuli, 1);
+vnUseStimIDs = 1:nNumStimuli;
+
+if (~isempty(nBlankStimID))
+    vtStimulusDurations(nBlankStimID) = tBlankStimTime;
+    mtStimulusUseTimes(nBlankStimID, 1) = 0;
+    mtStimLabelTimes(nBlankStimID, :) = nan;
+    mtBlankTimes(nBlankStimID, :) = tBlankStimTime * [fUsePreStimBlankProportion 1];
+    vnUseStimIDs = vnUseStimIDs(vnUseStimIDs ~= nBlankStimID);
 end
 
-fsStack.vtStimulusDurations = vtStimDurations;
-
-% - Assign stimulus use times
-mtStimUseTimes = repmat([tPixelBlankTime tPixelBlankTime+tPixelDuration], prod(vnNumPixels), 1);
-
-if (~isempty(tBlankStimTime) && (tBlankStimTime ~= 0))
-   mtStimUseTimes = [[0 tBlankStimTime]; mtStimUseTimes];
-end
-
-fsStack.mtStimulusUseTimes = mtStimUseTimes;
+fsStack.vtStimulusDurations = vtStimulusDurations;
+fsStack.mtStimulusUseTimes = mtStimulusUseTimes;
 
 % -- Align stack, if requested
 if (bAlign)
@@ -140,7 +144,7 @@ end
 % -- Assign blank frames, if requested
 if (bAssignBlank)
    disp('--- QuickAnalyseSparseRF: Assigning blank frames...');
-   AssignBlank(fsStack, fhExtractionFunction);
+   AssignBlank(fsStack, fhExtractionFunction, mtBlankTimes, nBlankStimID);
 end
 
 % fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
@@ -182,12 +186,11 @@ sRFAnalysis.sRegions = sRegions;
 disp('--- QuickAnalyseSparseRF: Extracting responses...');
 
 [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, tfTrialResponses, tnTrialSampleSizes] = ...
-   ExtractRegionResponses(fsStack, sRFAnalysis.sRegions, 1, fhExtractionFunction(bAssignBlank));
+   ExtractRegionResponses(fsStack, sRFAnalysis.sRegions, nBlankStimID, fhExtractionFunction(bAssignBlank));
 
 if (bAssignBlank)
    disp('--- QuickAnalyseSparseRF: Measuring responsiveness...');
    % - Compute Z-score against blank STDs
-   nNumStimuli = numel(fsStack.vtStimulusDurations);
    mnStimSampleSizes = sum(tnTrialSampleSizes, 3);
    mfBlankStdsCorr = repmat(vfBlankStds', 1, nNumStimuli) ./ sqrt(mnStimSampleSizes);
    mfStimZScores = mfStimMeanResponses ./ mfBlankStdsCorr;
@@ -238,7 +241,7 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
 %
 % Usage: AssignBlank(fsStack, fhExtractionFunction)
 
-   function AssignBlank(fsStack, fhExtractionFunction)
+   function AssignBlank(fsStack, fhExtractionFunction, mtBlankTimes, nBlankStimID)
       
       mbAlignMask = fsStack.GetAlignedMask; %#ok<NASGU>
       
@@ -259,7 +262,7 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
       
       vnStimSet = unique(vnStimulusSeqID);
       vnStimSet = vnStimSet(~isnan(vnStimSet));
-      vnStimSet = setdiff(vnStimSet, 1);
+      vnStimSet = setdiff(vnStimSet, nBlankStimID);
       
       nProgress = 0;
       nProgressMax = numel(fsStack.cstrFilenames) * numel(vnStimSet);
@@ -269,7 +272,7 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
       for (nBlock = 1:numel(fsStack.cstrFilenames)) %#ok<FORPF>
          % - Get the median blank frame for this block
          vbBlockFrames = vnBlockIndex == nBlock;
-         vbBlockBlankStimFrames = vbBlockFrames & (vnStimulusSeqID == 1);
+         vbBlockBlankStimFrames = vbBlockFrames & (vnStimulusSeqID == nBlankStimID);
          vbBlockBlankFrames = vbBlockBlankStimFrames & vbUseFrame;
          
          tfBlankFrames = reshape(fhEF(fsStack, 1:prod(size(fsStack, 1:2)), vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []); %#ok<PSIZE>
@@ -291,8 +294,8 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
             
             % - Find blank frames for this presentation (start and end of blank time)
             vbPresBlankFrames =  vbPresFrames & ...
-               (vtTimeInStimPresentation >= 0) & ...
-               (vtTimeInStimPresentation <= tPixelBlankTime);
+               (vtTimeInStimPresentation >= mtBlankTimes(nStimSeqID, 1)) & ...
+               (vtTimeInStimPresentation <= mtBlankTimes(nStimSeqID, 2));
             
             % - Extract these blank frames
             tfPresBlank = reshape(fhEF(fsStack, 1:prod(size(fsStack, 1:2)), vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []); %#ok<PSIZE>
@@ -357,10 +360,10 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
       
       % - Get the responses
       if (bUsedFF)
-         mfStimResp = sRFAnalysis.mfStimZScores;
+         mfStimResp = sRFAnalysis.mfStimZScores(vnUseStimIDs, :);
          fThreshold = 3;
       else
-         mfStimResp = sRFAnalysis.mfStimMeanResponses;
+         mfStimResp = sRFAnalysis.mfStimMeanResponses(vnUseStimIDs, :);
          fThreshold = 0;
       end
       
@@ -371,11 +374,7 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
          % - Accumulate Gaussians over stimulus locations for this RF
          nROI = vnSelectedROIs(MRFI_nROIIndex);
          
-         if (sRFAnalysis.tBlankStimTime ~= 0)
-            vfROIResponse = mfStimResp(nROI, 2:end);
-         else
-            vfROIResponse = mfStimResp(nROI, :);
-         end
+         vfROIResponse = mfStimResp(nROI, :);
          vfROIResponse = permute(vfROIResponse, [3 1 2]);
          
          % - Remove NaNs and INFs
