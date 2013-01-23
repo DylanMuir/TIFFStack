@@ -1,4 +1,4 @@
-function [mfFrameOffsets] = GetStackAlignment(tfStack, vnChannel, bProgressive, nUpsampling, mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPUM, mnTrialRanges)
+function [mfFrameOffsets] = GetStackAlignment(tfStack, vnChannel, bProgressive, nUpsampling, mfReferenceImage, nWindowLength, vfSpatFreqCutoffCPP, mnTrialRanges)
 
 % GetStackAlignment - METHOD Compute registration for an image stack (possible sub-pixel resolution)
 %
@@ -44,6 +44,10 @@ function [mfFrameOffsets] = GetStackAlignment(tfStack, vnChannel, bProgressive, 
 % [fMinFreqCPP fMaxFreqCPP], both in cycles per pixel.  Spatial frequencies
 % between these limits are included by a band-pass filter.
 %
+% 'mnTrialRanges' is an Nx2 matrix, where each row defines the beginning
+% and end of each trial block, in frame indices: [nStartFrame nEndFrame].
+% This is used to manage averaging windows within a trial block.
+%
 % 'mfFrameOffsets' gives the offsets [x y] to shift each frame, such that the
 % whole stack is in alignment.
 %
@@ -61,7 +65,7 @@ function [mfFrameOffsets] = GetStackAlignment(tfStack, vnChannel, bProgressive, 
 DEF_vnChannel = 1;
 DEF_bProgressive = false;
 DEF_nUpsampling = 1;
-DEF_vfSpatFreqCutoffCPUM = [0 inf];
+DEF_vfSpatFreqCutoffCPP = [0 inf];
 DEF_nWindowLength = 1;
 
 
@@ -105,11 +109,11 @@ else
    fhChannelFunc = @(t)nansum(t, 4);
 end
 
-if (~exist('vfSpatFreqCutoffCPUM', 'var') || isempty(vfSpatFreqCutoffCPUM))
-    vfSpatFreqCutoffCPUM = DEF_vfSpatFreqCutoffCPUM;
+if (~exist('vfSpatFreqCutoffCPP', 'var') || isempty(vfSpatFreqCutoffCPP))
+    vfSpatFreqCutoffCPP = DEF_vfSpatFreqCutoffCPP;
 end
 
-vfSpatFreqCutoffCPUM = sort(vfSpatFreqCutoffCPUM);
+vfSpatFreqCutoffCPP = sort(vfSpatFreqCutoffCPP);
 
 if (~exist('mnTrialRanges', 'var') || isempty(mnTrialRanges))
    mnTrialRanges = [1 size(tfStack, 3)];
@@ -134,8 +138,10 @@ vfySFreq = ifftshift(fSpatSamplingPPUM .* ((-vnSFiltSize(2)/2) : (vnSFiltSize(2)
 
 % - Generate a spatial band-pass filter
 mfSpatFilter = false(vnSFiltSize(1:2));
-mfSpatFilter(sqrt((mfXSFreq.^2) + (mfYSFreq.^2)) >= vfSpatFreqCutoffCPUM(1)) = 1;
-mfSpatFilter(sqrt((mfXSFreq.^2) + (mfYSFreq.^2)) > vfSpatFreqCutoffCPUM(2)) = 0;
+mfSpatFilter(sqrt((mfXSFreq.^2) + (mfYSFreq.^2)) >= vfSpatFreqCutoffCPP(1)) = 1;
+mfSpatFilter(sqrt((mfXSFreq.^2) + (mfYSFreq.^2)) > vfSpatFreqCutoffCPP(2)) = 0;
+
+% figure, imagesc(mfSpatFilter);colorbar;
 
 % - Build window indices
 vnWindow = ceil(-(nWindowLength-1)/2):floor(nWindowLength/2);
@@ -200,14 +206,18 @@ for (nTrial = 1:size(mnTrialRanges, 1))
       % - Perform a spatial band-pass filter on the frame
       mfFFTThisFrame = mfFFTThisFrame .* mfSpatFilter;
       
-%       figure(hFig);
-%       imagesc(abs(ifft2(mfFFTThisFrame)));
-%       drawnow;
-      
       % - Determine the registration
       [vOutput] = dftregistration(mfFFTRegFrame, mfFFTThisFrame, nUpsampling);
       mfFrameOffsets(nFrame, :) = vOutput([4 3]);
       
+%       figure(hFig);
+%       cla;
+%       imagesc(abs(ifft2(mfFFTThisFrame)));
+% %       hold on;
+% %       plot(vOutput(4), vOutput(3), 'kx', 'LineWidth', 2);
+%       axis equal tight;
+%       drawnow;
+%       
       % - Record registration frame, if doing progressive alignment
       if (bProgressive)
          % - Register the next frame against this one
