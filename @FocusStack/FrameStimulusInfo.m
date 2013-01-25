@@ -2,7 +2,7 @@ function [vtGlobalTime, ...
           vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
           vnStimulusSeqID, vtTimeInStimPresentation, ...
           vnPresentationIndex, vbUseFrame] = ...
-            FrameStimulusInfo(oStack, vnFrameIndices)
+            FrameStimulusInfo(oStack, vnFrameIndices, tBaseTimeShift)
 
 % FrameStimulusInfo - METHOD Return stimulus information about stack frames
 %
@@ -10,13 +10,22 @@ function [vtGlobalTime, ...
 %         vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
 %         vnStimulusSeqID, vtTimeInStimPresentation, ...
 %         vnPresentationIndex, vbUseFrame] = ...
-%           FrameStimulusInfo(oStack <, vnFrameIndices>)
+%           FrameStimulusInfo(oStack <, vnFrameIndices, tBaseTimeShift>)
 %
 % 'oStack' is a FocusStack.
 %
 % 'vnFrameIndices' is a vector of frame indices into 'oStack', for which we
 % would like some extra information.  If not provided, information for all
 % frames in order will be returned.
+%
+% 'tBaseTimeShift' is a time in seconds to shift the time stamping of the
+% stimulus frames in the stack.  Positive values imply that the analysed
+% frames will fall later in stack time than specified by the stimulus start
+% time.  Negative and positive values are possible (Default: 0).  This
+% parameters changes only the stimulus-related metadata (vnStimulusSeqID,
+% vtTimeInStimPresentation, vnPresentationIndex, vbUseFrame), and not the
+% global stack timing (vtGlobalTime, vnBlockIndex, vnFrameInBlock,
+% vtTimeInBlock).
 %
 % 'vtGlobalTime' will be a vector of time, in seconds, corresponding to each
 % frame in 'vnFrameIndices'.
@@ -47,6 +56,11 @@ function [vtGlobalTime, ...
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 13th January, 2011
 
+% -- Defaults
+
+DEF_tBaseTimeShift = 0;
+
+
 % -- Check for valid indices
 
 if (nargin < 1)
@@ -63,6 +77,11 @@ elseif (any(vnFrameIndices(:) < 1) || any(vnFrameIndices(:) > nNumFrames))
    error('FocusStack:InvalidArgument', ...
       '*** FocusStack/FrameStimulusInfo: ''vnFrameIndices'' must be limited to [1 .. %d] for this stack.', ...
       nNumFrames);
+end
+
+
+if (~exist('tBaseTimeShift', 'var') || isempty(tBaseTimeShift))
+   tBaseTimeShift = DEF_tBaseTimeShift;
 end
 
 
@@ -110,8 +129,11 @@ if (bComputeStimInfo)
    % - Get stimulus start times and nominal durations
    vtStimulusStartTimes = oStack.vtStimulusStartTimes;
    vtStimulusEndTimes = oStack.vtStimulusEndTimes;
-   vtStimulusDurations = oStack.vtStimulusDurations;
    mtStimulusUseTimes = oStack.mtStimulusUseTimes;
+   
+   % - Shift stimulus times
+   vtStimulusStartTimes = vtStimulusStartTimes + tBaseTimeShift;
+   vtStimulusEndTimes = vtStimulusEndTimes + tBaseTimeShift;
    
    % - Compute time in stimulus segment
    cvnSequenceIDs = oStack.cvnSequenceIDs;

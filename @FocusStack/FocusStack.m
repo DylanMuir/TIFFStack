@@ -658,6 +658,9 @@ classdef FocusStack < handle
          if (isempty(oStack.tFrameDuration))
             oStack.tFrameDuration = oData.tFrameDuration;
          end
+         if (~isempty(oData.mtStimulusUseTimes))
+            oStack.mtStimulusUseTimes = oData.mtStimulusUseTimes;
+         end
       end
    end
 end

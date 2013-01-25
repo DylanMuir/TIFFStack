@@ -21,9 +21,9 @@ function [sCellRegions] = FindCells_GChannel(fsData, fLFRadiusUM, fHFRadiusUM, f
 
 % -- Default parameters
 
-DEF_fCellRadiusUM = 2.5;
-DEF_fHFRadiusUM = 1.6;
-DEF_fLFRadiusUM = 10;
+DEF_fCellRadiusUM = 6;
+DEF_fHFRadiusUM = 4;
+DEF_fLFRadiusUM = 25;
 
 
 % -- Check arguments

@@ -3,7 +3,7 @@ function [vhFigures, mfRegionResponses] = ...
                                   mtStimLabelTimes, ...
                                   fDFFScaleBarLength, tTimeScaleBarLength, ...
                                   nLimitNumberOfCells, cstrAnnotation, ...
-                                  mbHighlightStims, nNumResponsesPerFigure)
+                                  mbHighlightStims, nNumResponsesPerFigure, tBaseTimeShift)
 
 % PlotRegionResponses - FUNCTION Make a set of plots showing the response traces of identified regions
 %
@@ -12,7 +12,7 @@ function [vhFigures, mfRegionResponses] = ...
 %                                 <mtStimLabelTimes>, ...
 %                                 <fDFFScaleBarLength, tTimeScaleBarLength, ...
 %                                 nLimitNumberOfCells, cstrAnnotation, ...
-%                                 mbHighlightStims, nNumResponsesPerFigure>)
+%                                 mbHighlightStims, nNumResponsesPerFigure, tBaseTimeShift>)
 %
 % If 'fsStack' is supplied, region traces will be extracted and returned in
 % 'mfRegionResponses'.  The traces for channel 1 only will be used.  The region
@@ -55,6 +55,10 @@ end
 
 if (~exist('nNumResponsesPerFigure', 'var') || isempty(nNumResponsesPerFigure))
    nNumResponsesPerFigure = DEF_nNumResponsesPerFigure;
+end
+
+if (~exist('tBaseTimeShift', 'var'))
+   tBaseTimeShift = [];
 end
 
 % - Check that required stack data are present
@@ -121,7 +125,7 @@ end
 [vtGlobalTime, ...
  vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
  vnStimulusSeqID, vtTimeInStimPresentation] = ...
- 	FrameStimulusInfo(fsStack, 1:nNumFrames);
+ 	FrameStimulusInfo(fsStack, 1:nNumFrames, tBaseTimeShift);
 
 
 % -- Decide where to place stimuli in "time"
@@ -271,7 +275,7 @@ for (nRegion = 1:nNumRegions)
    end
    
    % - Set the plot properties
-   axis([0 vfLims(2) vfYLims]);
+%    axis([0 vfLims(2) vfYLims]);
 %    axis tight;
    box off;
    

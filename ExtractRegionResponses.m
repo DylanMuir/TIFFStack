@@ -1,12 +1,12 @@
 function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
           mfRegionTraces, tfTrialResponses, tnFramesInSample, cvfTrialTraces] = ...
-   ExtractRegionResponses(fsStack, sRegions, nBlankStimID, fhExtractionFunction)
+   ExtractRegionResponses(fsStack, sRegions, nBlankStimID, fhExtractionFunction, tBaseTimeShift)
 
 % ExtractRegionResponses - FUNCTION Extract responses from identified regions of interest
 %
 % Usage: [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
 %         tfTrialResponses, tnFramesInSample, cvfTrialTraces] = ...
-%           ExtractRegionResponses(fsStack, sRegions, nBlankStimID, <, fhExtractionFunction>)
+%           ExtractRegionResponses(fsStack, sRegions, nBlankStimID, <, fhExtractionFunction, tBaseTimeShift>)
 %
 % 'fsStack' is a FocusStack object.  If stimulus information is embedded (ie
 % 'vtStimulusDirations', 'vtStimulusStartTimes', 'vtStimulusEndTimes',
@@ -36,6 +36,11 @@ function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
 %
 % If 'fhExtractionFunction' is not supplied, the default will be to extract the
 % time and space average of channel 1.
+%
+% The optional parameter 'tBaseTimeShift' shifts the effective stimulus
+% start and end times by the provided amount (in seconds; positive or
+% negative).  Use this to shif the analysed frames in the stack earlier or
+% later. (Default: Not used).  See FrameStimulusInfo for more information.
 %
 % 'vfBlankStds' will be a vector [Rx1], where 'R' is the number of ROIs.  Each
 % element contains the blank standard deviation (corrected for the number of
@@ -87,6 +92,10 @@ if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
    fhExtractionFunction = ExtractMean;
 end
 
+if (~exist('tBaseTimeShift', 'var'))
+   tBaseTimeShift = [];
+end
+
 nNumFrames = size(fsStack, 3);
 
 % - Check that required stack data are present
@@ -104,7 +113,7 @@ else
       vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
       vnStimulusSeqID, vtTimeInStimPresentation, ...
       vnPresentationIndex, vbUseFrame] = ...
-         FrameStimulusInfo(fsStack, 1:nNumFrames);
+         FrameStimulusInfo(fsStack, 1:nNumFrames, tBaseTimeShift);
 end
 
 
@@ -146,7 +155,7 @@ if (bSegmentStack)
          % - Find matching stack frames for this trial
          vbFramesThisTrialStim = (vnStimulusSeqID == nStimSeqID) & (nTrialID == vnBlockIndex) & vbUseFrame;
          [nul, cvfTrialTracesAll, cfTrialResponses, cnFramesInSample] = ...
-            fhExtractionFunction(fsStack, sRegions.PixelIdxList, find(vbFramesThisTrialStim)); %#ok<FNDSB>
+            fhExtractionFunction(fsStack, sRegions.PixelIdxList, vbFramesThisTrialStim);
 
          % - Separate out regions
          [cvfTrialTraces{:, nStimSeqID, nTrialID}] = deal(cvfTrialTracesAll{:});

@@ -3,7 +3,7 @@ function [sRFAnalysis] = OfflineAnalysisSparseRF(cstrFilenames, ...
    tPixelDuration, nBlankStimID, tBlankStimTime, ...
    bAlign, bAssignBlack, bAssignBlank, ...
    tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
-   mfCustomAlignment, fhExtractionFunction)
+   mfCustomAlignment, fhExtractionFunction, tBaseTimeShift)
 
 
 
@@ -14,7 +14,7 @@ function [sRFAnalysis] = OfflineAnalysisSparseRF(cstrFilenames, ...
 %                               tPixelDuration, nBlankStimID, tBlankStimTime, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
 %                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
-%                               mfCustomAlignment, fhExtractionFunctionFunction)
+%                               mfCustomAlignment, fhExtractionFunctionFunction, tBaseTimeShift)
 %
 % 'mfCustomAlignment' can be a matrix, in which case it is used as an image
 % against which to measure misalignment.  It can be a scalar, in which case
@@ -28,7 +28,6 @@ DEF_bAlign = false;
 DEF_bAssignBlack = false;
 DEF_bAssignBlank = false;
 DEF_mfCustomAlignment = 10;
-DEF_bOrderROIs = true;
 
 fUsePreStimBlankProportion = 0.5;
 
@@ -56,13 +55,13 @@ if (~exist('mfCustomAlignment', 'var') || isempty(mfCustomAlignment))
    mfCustomAlignment = DEF_mfCustomAlignment;
 end
 
-if (~exist('bOrderROIs', 'var') || isempty(bOrderROIs))
-   bOrderROIs = DEF_bOrderROIs;
-end
-
 DEF_fhExtractionFunction = @(bDFF)ExtractMean(1, bDFF);
 if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
    fhExtractionFunction = DEF_fhExtractionFunction;
+end
+
+if (~exist('tBaseTimeShift', 'var'))
+   tBaseTimeShift = [];
 end
 
 
@@ -186,7 +185,7 @@ sRFAnalysis.sRegions = sRegions;
 disp('--- QuickAnalyseSparseRF: Extracting responses...');
 
 [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, tfTrialResponses, tnTrialSampleSizes] = ...
-   ExtractRegionResponses(fsStack, sRFAnalysis.sRegions, nBlankStimID, fhExtractionFunction(bAssignBlank));
+   ExtractRegionResponses(fsStack, sRFAnalysis.sRegions, nBlankStimID, fhExtractionFunction(bAssignBlank), tBaseTimeShift);
 
 if (bAssignBlank)
    disp('--- QuickAnalyseSparseRF: Measuring responsiveness...');
@@ -360,10 +359,10 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
       
       % - Get the responses
       if (bUsedFF)
-         mfStimResp = sRFAnalysis.mfStimZScores(vnUseStimIDs, :);
+         mfStimResp = sRFAnalysis.mfStimZScores(:, vnUseStimIDs);
          fThreshold = 3;
       else
-         mfStimResp = sRFAnalysis.mfStimMeanResponses(vnUseStimIDs, :);
+         mfStimResp = sRFAnalysis.mfStimMeanResponses(:, vnUseStimIDs);
          fThreshold = 0;
       end
       
@@ -420,7 +419,7 @@ sRFAnalysis.vsRFEstimates = vsRFExport;
       if (~isempty(mnRFPeaks))
          sExport.vfRFOffsetDeg = (mnRFPeaks(nRFIndex, [2 1]) - size(sExport.mfRFImage)./2) .* (sRFAnalysis.vfScreenSizeDeg ./ size(sExport.mfRFImage));
       else
-         sExport.vfRFOffsetDeg = [];
+         sExport.vfRFOffsetDeg = [nan nan];
       end
       
       % - Estimate population RF size

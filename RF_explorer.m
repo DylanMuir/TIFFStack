@@ -359,10 +359,10 @@ vnUseStimIDs = 1:size(handles.mfStimZScores, 2);
 vnUseStimIDs = setdiff(vnUseStimIDs, handles.nBlankStimID);
 
 if (bUsedFF)
-   mfStimResp = handles.mfStimZScores(:,vnUseStimIDs); % to check, was mfStimResp = handles.mfStimZScores(vnUseStimIDs,:);
+   mfStimResp = handles.mfStimZScores(:, vnUseStimIDs);
    fThreshold = 3;
 else
-   mfStimResp = handles.mfStimMeanResponses(:,vnUseStimIDs);
+   mfStimResp = handles.mfStimMeanResponses(:, vnUseStimIDs);
    fThreshold = 0;
 end
 
