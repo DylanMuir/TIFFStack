@@ -98,7 +98,7 @@ try
             oTForm = maketform('projective', mfTranslation);
             
             % - Align the frame according to the pre-calculated shift data
-            tfAlignedFrame = imtransform(tfThisFrame, oTForm, 'XData', [1 vnStackSize(1)], 'YData', [1 vnStackSize(2)]);
+            tfAlignedFrame = imtransform(tfThisFrame, oTForm, 'XData', [1 vnStackSize(1)], 'YData', [1 vnStackSize(2)], 'FillValues', nan);
          else
             tfAlignedFrame = tfThisFrame;
          end

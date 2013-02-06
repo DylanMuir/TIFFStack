@@ -12,6 +12,8 @@
 % To accumulate over the stack:
 %    fsStack.SummedFrames(:, :, :, :);
 %    fsStack.SummedAlignedFrames(:, :, :, :);
+%
+% To average a region within a frame and extract a mean trace:
 %    fsStack.MeanPixels(:, :, :, :);
 %
 % To assign blank frames:

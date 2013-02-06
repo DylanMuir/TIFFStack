@@ -133,7 +133,7 @@ while (~isequal(vfLastDists, vfDists))
       
       % - Fix up frame shift distances
       vfDists(nReplaceInd) = 0;
-      if (nReplaceInd < numel(vfDists))
+      if (nReplaceInd < (numel(vfDists)-1))
          vfDists(nReplaceInd+1) = sqrt(sum((mfFrameOffsets(nReplaceInd+2, :) - mfFrameOffsets(nReplaceInd+1, :)).^2, 2));
       end
       
