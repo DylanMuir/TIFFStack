@@ -611,7 +611,11 @@ classdef FocusStack < handle
       % loadobj - LOAD FUNCTION
       function oStack = loadobj(oData)
          % - Construct a new stack
-         oStack = FocusStack(oData.cstrFilenames, oData.bWritable);
+         try
+            oStack = FocusStack(oData.cstrFilenames, oData.bWritable);
+         catch mErr
+            disp('--- Warning: FocusStack is not linked to data files.');
+         end
          
          % - Assign saved values
          if (~isempty(oData.mfFrameShifts))
@@ -657,7 +661,7 @@ classdef FocusStack < handle
             oStack.bConvertToDFF = oData.bConvertToDFF;
          end
          
-         if (isempty(oStack.tFrameDuration))
+         if (~isfield(oStack, 'tFrameDuration') || isempty(oStack.tFrameDuration))
             oStack.tFrameDuration = oData.tFrameDuration;
          end
          if (~isempty(oData.mtStimulusUseTimes))

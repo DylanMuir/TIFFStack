@@ -4,7 +4,7 @@ function OpenFiles(oStack)
 
    nNumFiles = numel(oStack.cstrFilenames);
 
-%    try
+   try
       for (nFile = 1:nNumFiles)
          % - Extract a full file path
          strFullPath = get_full_file_path(oStack.cstrFilenames{nFile});
@@ -34,12 +34,12 @@ function OpenFiles(oStack)
 
       end
 
-%    catch sErr
-%       % - Display an error message
-%       disp('*** FocusStack: Could not open the specified raw data files.');
-% 
-%       rethrow(sErr);
-%    end
+   catch sErr
+      % - Display an error message
+      disp('*** FocusStack: Could not open the specified raw data files.');
+
+      rethrow(sErr);
+   end
 
 end
 

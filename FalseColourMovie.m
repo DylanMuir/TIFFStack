@@ -1,8 +1,8 @@
-function FalseColourMovie(strFilename, fsStack, sRegions, vfDataRange, nChannel, mfAverage, mfColormap, strMovieType, bInvert)
+function FalseColourMovie(strFilename, fsStack, sRegions, vfDataRange, nChannel, mfAverage, mfColormap, strMovieType, bInvert, vbStimFrames, nStimMarkerSize)
 
 % FalseColourMovie - FUNCTION Write a false-colour movie of stack activity
 %
-% Usage: FalseColourMovie(strFilename, fsStack, sRegions, vfDataRange <, nChannel, mfAverage, mfColormap, strMovieType, bInvert>)
+% Usage: FalseColourMovie(strFilename, fsStack, sRegions, vfDataRange <, nChannel, mfAverage, mfColormap, strMovieType, bInvert, vbStimFrames, nStimMarkerSize>)
 %
 % Generates a false-colour activity movie from a stack 'fsStack', showing
 % only activity within the regions 'sRegions'.  TIFF and AVI movies can be
@@ -38,6 +38,8 @@ function FalseColourMovie(strFilename, fsStack, sRegions, vfDataRange, nChannel,
 % - Default arguments
 DEF_mfColormap = jet(256);
 DEF_strMovieType = 'raw';
+DEF_nStimMarkerSize = 10;
+
 
 %% -- Check arguments
 
@@ -85,6 +87,14 @@ if (bInvert)
    mfAverage = 1 - mfAverage;
 end
 
+if (~exist('vbStimFrames', 'var'))
+   vbStimFrames = false(1, nNumFrames);
+end
+
+if (~exist('nStimMarkerSize', 'var'))
+   nStimMarkerSize = DEF_nStimMarkerSize;
+end
+
 %% -- What type of activity movie should we export?
 
 switch(lower(strMovieType))
@@ -109,6 +119,16 @@ end
 
 [~, ~, strFormat] = fileparts(strFilename);
 
+% - Does the file exist?
+if (exist(strFilename, 'file'))
+   disp('*** FalseColourMovie: Warning: This file will be overwritten.');
+   disp('       Press any key to continue.');
+   pause;
+   
+   % - Delete the file
+   delete(strFilename);
+end
+
 if (isempty(strFormat))
    strFormat = '.tif';
 end
@@ -126,16 +146,6 @@ switch (lower(strFormat))
       
    otherwise
       error('*** FalseColourMovie: Unsupported movie format.');
-end
-
-% - Does the file exist?
-if (exist(strFilename, 'file'))
-   disp('*** FalseColourMovie: Warning: This file will be overwritten.');
-   disp('       Press any key to continue.');
-   pause;
-   
-   % - Delete the file
-   delete(strFilename);
 end
 
 
@@ -171,6 +181,11 @@ for (nFrame = 1:nNumFrames)
    
    % - Replace this image frame with colormap values
    tfThisIm(repmat(mbThisMask, [1 1 3])) = mfColormap(mnIndices(mbThisMask), :);
+   
+   % - Add a stimulus marker
+   if (vbStimFrames(nFrame))
+      tfThisIm(end-nStimMarkerSize:end, end-nStimMarkerSize:end, :) = 1;
+   end
    
    % - Write this image frame
    fhWriteFrame(permute(tfThisIm, [2 1 3]));
