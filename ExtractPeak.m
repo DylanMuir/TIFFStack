@@ -3,13 +3,20 @@ function [fhExtractionFun] = ExtractPeak(nSampleFrames, nChannel, bUsedFF)
 % ExtractPeak - Extraction function for returning the peak of the response
 %
 % Usage: [fhExtractionFun] = ExtractPeak(<nSampleFrames, nChannel, bUsedFF>)
+% Usage: [fhExtractionFun] = ExtractPeak(<vnSampleOffsets, nChannel, bUsedFF>)
 %
 % This function will extract the trace of a region, find the peak point
 % during that trace, and return the average of a few frames around that
 % point.
 %
 % 'nSampleFrames' specifies the number of frames to sample for the mean of
-% the peak (default: 5);
+% the peak (default: 5).  This will correspond to a sampling window of
+% [-2 -1 0 1 2] frames around the peak (placed at 0).
+%
+% Optionally, 'vnSampleOffsets' can be provided as a vector of offsets from
+% the peak response location.  For example, [-2 -1 0 1 2] would result in
+% the default sampling window.  [0 1 2] would sample the peak and the two
+% following frames.
 %
 % 'nChannel' specifies which channel to extract (default: 1).
 %
@@ -43,16 +50,22 @@ if (~exist('bUsedFF', 'var') || isempty(bUsedFF))
    bUsedFF = DEF_bUsedFF;
 end
 
+if (numel(nSampleFrames) == 1)
+   vnSampleWindow = (-floor(nSampleFrames/2)):(ceil(nSampleFrames/2)-1);
+else
+   vnSampleWindow = nSampleFrames;
+end
+
 
 % -- Return function handle
 
-fhExtractionFun = @(fsData, vnPixels, vnFrames)fhExtractPeak(fsData, vnPixels, vnFrames, nSampleFrames, nChannel, bUsedFF);
+fhExtractionFun = @(fsData, vnPixels, vnFrames)fhExtractPeak(fsData, vnPixels, vnFrames, vnSampleWindow, nChannel, bUsedFF);
 
 
 % --- END of ExtractPeak.m ---
 
    function [cmfRawTrace, cvfRegionTrace, cfRegionResponse, cnFramesInSample, cvfPixelResponse] = ...
-         fhExtractPeak(fsData, cvnPixels, vnFrames, nSampleFrames, nChannel, bUsedFF)
+         fhExtractPeak(fsData, cvnPixels, vnFrames, vnSampleWindow, nChannel, bUsedFF)
       
       if (~iscell(cvnPixels))
          cvnPixels = {cvnPixels};
@@ -104,8 +117,8 @@ fhExtractionFun = @(fsData, vnPixels, vnFrames)fhExtractPeak(fsData, vnPixels, v
             % - Locate peak
             [nul, nPeakIndex] = nanmax(cvfRegionTrace{nROI});
             
-            % - Average frames surrounding peak
-            vnWindow = (nPeakIndex - floor(nSampleFrames/2)):(nPeakIndex + ceil(nSampleFrames/2)-1);
+            % - Average frames surrounding peak, according to sampling window
+            vnWindow = nPeakIndex + vnSampleWindow;
             vnWindow = vnWindow(vnWindow >= 1);
             vnWindow = vnWindow(vnWindow <= numel(cvfRegionTrace{nROI}));
             
