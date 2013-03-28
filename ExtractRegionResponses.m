@@ -125,7 +125,11 @@ fprintf('ExtractRegionResponses...');
 % - Extract the region traces
 nNumFrames = size(fsStack, 3);
 [nul, cvfRegionTrace] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, 1:nNumFrames);
-mfRegionTraces = vertcat(cvfRegionTrace{:});
+if ~iscell(cvfRegionTrace)
+    mfRegionTraces = cvfRegionTrace;
+else
+    mfRegionTraces = vertcat(cvfRegionTrace{:});
+end
 
 % - Extract the region blanks
 if (~isempty(nBlankStimID))
@@ -135,6 +139,11 @@ else
 end
 
 [cmfBlankTrace, cvfRegionBlank] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, vbBlankFrames);
+if ~iscell(cmfBlankTrace)
+    cmfBlankTrace = {cmfBlankTrace};
+    cvfRegionBlank = {cvfRegionBlank};
+end
+
 vfBlankStds = cellfun(@nanstd, cvfRegionBlank);
 
 
@@ -157,6 +166,12 @@ if (bSegmentStack)
          [nul, cvfTrialTracesAll, cfTrialResponses, cnFramesInSample] = ...
             fhExtractionFunction(fsStack, sRegions.PixelIdxList, vbFramesThisTrialStim);
 
+        if ~iscell(cvfTrialTracesAll)
+            cvfTrialTracesAll = {cvfTrialTracesAll};
+            cfTrialResponses = {cfTrialResponses};
+            cnFramesInSample = {cnFramesInSample};
+        end
+        
          % - Separate out regions
          [cvfTrialTraces{:, nStimSeqID, nTrialID}] = deal(cvfTrialTracesAll{:});
          tfTrialResponses(:, nStimSeqID, nTrialID) = [cfTrialResponses{:}];
