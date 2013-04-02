@@ -107,14 +107,14 @@ nNumStimuli = prod(vnNumPixels) + ~isempty(nBlankStimID);
 vtStimulusDurations = repmat(tPixelDuration + tPixelBlankTime, nNumStimuli, 1);
 mtStimulusUseTimes = repmat(tPixelBlankTime + [0 tPixelDuration], nNumStimuli, 1);
 mtStimLabelTimes = repmat(tPixelBlankTime + [0 tPixelDuration], nNumStimuli, 1);
-mtBlankTimes = repmat(tPixelBlankTime * [fUsePreStimBlankProportion 1], nNumStimuli, 1);
+mtBlankTimes = repmat(tPixelBlankTime * [(1-fUsePreStimBlankProportion) 1], nNumStimuli, 1);
 vnUseStimIDs = 1:nNumStimuli;
 
 if (~isempty(nBlankStimID))
     vtStimulusDurations(nBlankStimID) = tBlankStimTime;
     mtStimulusUseTimes(nBlankStimID, 1) = 0;
     mtStimLabelTimes(nBlankStimID, :) = nan;
-    mtBlankTimes(nBlankStimID, :) = tBlankStimTime * [fUsePreStimBlankProportion 1];
+    mtBlankTimes(nBlankStimID, :) = tBlankStimTime * [(1-fUsePreStimBlankProportion) 1];
     vnUseStimIDs = vnUseStimIDs(vnUseStimIDs ~= nBlankStimID);
 end
 
