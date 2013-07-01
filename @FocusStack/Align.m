@@ -127,7 +127,7 @@ while (~isequal(vfLastDists, vfDists))
    vbIgnoreShift = vfDists > fMaxShiftPerFrame;
    
    while (any(vbIgnoreShift))
-      % - Rplace the first found frame
+      % - Replace the first found frame
       nReplaceInd = find(vbIgnoreShift, 1, 'first');
       mfFrameOffsets(nReplaceInd+1, :) = mfFrameOffsets(nReplaceInd, :);
       

@@ -196,6 +196,10 @@ for (nTrial = 1:size(mnTrialRanges, 1))
       mfFFTRegFrame = mfFFTRegFrame .* mfSpatFilter;
    end
    
+%    figure;
+%    imagesc(ifft2(mfFFTRegFrame)');
+%    axis equal tight;
+   
    for (nFrame = nFirstFrame:nLastFrame)
       % - Build up window
       tfWindow(:, :, nWindowIndex) = fhChannelFunc(subsref(tfStack, substruct('()', {':', ':', nFrame, vnChannel})));
@@ -212,12 +216,12 @@ for (nTrial = 1:size(mnTrialRanges, 1))
       
 %       figure(hFig);
 %       cla;
-%       imagesc(abs(ifft2(mfFFTThisFrame)));
+%       imagesc(abs(ifft2(mfFFTThisFrame))');
 % %       hold on;
 % %       plot(vOutput(4), vOutput(3), 'kx', 'LineWidth', 2);
 %       axis equal tight;
 %       drawnow;
-%       
+      
       % - Record registration frame, if doing progressive alignment
       if (bProgressive)
          % - Register the next frame against this one
