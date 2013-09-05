@@ -2,7 +2,7 @@ function [data, stack] = tiffread29_readimage(TIF, HEADER, vnFrames)
 
 % - Preallocate data block
 classname = get_data_class(HEADER(vnFrames(1)), 1);
-data = zeros(HEADER(vnFrames(1)).width, HEADER(vnFrames(1)).height, numel(vnFrames), HEADER(vnFrames(1)).SamplesPerPixel, classname);
+data = zeros(HEADER(vnFrames(1)).height, HEADER(vnFrames(1)).width, numel(vnFrames), HEADER(vnFrames(1)).SamplesPerPixel, classname);
 stack = [];
 
 for (nFrame = numel(vnFrames):-1:1) % Go backwards to pre-allocate
@@ -39,7 +39,7 @@ for (nFrame = numel(vnFrames):-1:1) % Go backwards to pre-allocate
       StripCnt = 1;
       %read the image channels
       for c = 1:HEADER(nFrame).SamplesPerPixel
-         data(:, :, nFrame, c) = read_plane(TIF, HEADER(vnFrames(nFrame)), 0, c, StripCnt)';
+         data(:, :, nFrame, c) = read_plane(TIF, HEADER(vnFrames(nFrame)), 0, c, StripCnt);
       end
    end
 end

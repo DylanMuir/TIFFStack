@@ -7,9 +7,15 @@
 % have the same dimensions.  Reading the image data is optimised to the extent
 % possible; the header information is only read once.
 % 
-% This class uses a modified version of tiffread [1, 2] to read data.  Code is
-% included (but disabled) to use the matlab imread function, but this function
-% returns invalid data for some TIFF formats.
+% This class attempts to use the version of tifflib built-in to recent
+% versions of Matlab, if available.  Otherwise this class uses a modified
+% version of tiffread [1, 2] to read data.  Code is included (but disabled)
+% to use the matlab imread function, but imread returns invalid data for
+% some TIFF formats.
+%
+% permute, ipermute and transpose are now transparantly supported. Note
+% that to read a pixel, the entire frame containing that pixel is read. So
+% reading a Z-slice of the stack will read in the entire stack.
 % 
 % Construction:
 % 
@@ -64,14 +70,32 @@ classdef TIFFStack < handle
    end
    
    properties (SetAccess = private, GetAccess = private)
-      vnStackSize;
+      vnDataSize;          % - Cached size of the TIFF stack
       TIF;                 % \_ Cached header infor for tiffread29 speedups
       HEADER;              % /
+      bUseTiffLib;         % - Flag indicating whether TiffLib is being used
+      fhReadFun;           % - When using Tiff class, function for reading data
+      vnDimensionOrder;    % - Internal dimensions order to support permution
    end
    
    methods
       % TIFFStack - CONSTRUCTOR
       function oStack = TIFFStack(strFilename, bInvert)
+         % - Can we use the accelerated TIFF library?
+         if (exist('tifflib') ~= 3) %#ok<EXIST>
+            % - Try to copy the library
+            strTiffLibLoc = which('/private/tifflib');
+            strTIFFStackLoc = fileparts(which('TIFFStack'));
+            copyfile(strTiffLibLoc, fullfile(strTIFFStackLoc, 'private'), 'f');
+         end
+         
+         oStack.bUseTiffLib = (exist('tifflib') == 3); %#ok<EXIST>
+         
+         if (~oStack.bUseTiffLib)
+            warning('TIFFStack:SlowAccess', ...
+                    '--- TIFFStack: Using slower non-TiffLib access.');
+         end
+         
          % - Check for inversion flag
          if (~exist('bInvert', 'var'))
             bInvert = false;
@@ -85,42 +109,147 @@ classdef TIFFStack < handle
          end
          
          % - Assign absolute file path to stack
-         oStack.strFilename = get_full_file_path(strFilename);
+         strFilename = get_full_file_path(strFilename);
+         oStack.strFilename = strFilename;
          
          % - Get image information
-%          try
+         try
             % - Read and save image information
             sInfo = imfinfo(strFilename);
             oStack.sImageInfo = sInfo;
 
-            % - Read TIFF header for tiffread29
-            [oStack.TIF, oStack.HEADER] = tiffread29_header(strFilename);
+            if (oStack.bUseTiffLib)
+               % - Create a Tiff object
+               oStack.TIF = tifflib('open', strFilename, 'r');
+               
+               % - Check data format
+               if(TiffgetTag(oStack.TIF, 'Photometric') == Tiff.Photometric.YCbCr)
+                  error('TIFFStack:UnsupportedFormat', ...
+                        '*** TIFFStack: YCbCr images are not supported.');
+               end
+               
+               % - Use Tiff to get the data class for this tiff
+               nDataClass = TiffgetTag(oStack.TIF, 'SampleFormat');
+               switch (nDataClass)
+                  case Tiff.SampleFormat.UInt
+                     switch (sInfo(1).BitsPerSample)
+                        case 1
+                           oStack.strDataClass = 'logical';
+                           
+                        case 8
+                           oStack.strDataClass = 'uint8';
+                           
+                        case 16
+                           oStack.strDataClass = 'uint16';
+                           
+                        case 32
+                           oStack.strDataClass = 'uint32';
+                           
+                        case 64
+                           oStack.strDataClass = 'uint64';
+                           
+                        otherwise
+                           error('TIFFStack:UnsupportedFormat', ...
+                                 '*** TIFFStack: The sample format of this TIFF stack is not supported.');
+                     end
+                     
+                  case Tiff.SampleFormat.Int
+                     switch (sInfo.BitsPerSample)
+                        case 1
+                           oStack.strDataClass = 'logical';
+                           
+                        case 8
+                           oStack.strDataClass = 'int8';
+                           
+                        case 16
+                           oStack.strDataClass = 'int16';
+                           
+                        case 32
+                           oStack.strDataClass = 'int32';
+                           
+                        case 64
+                           oStack.strDataClass = 'int64';                           
+                           
+                        otherwise
+                           error('TIFFStack:UnsupportedFormat', ...
+                              '*** TIFFStack: The sample format of this TIFF stack is not supported.');
+                     end
+                     
+                  case Tiff.SampleFormat.IEEEFP
+                     switch (sInfo.BitsPerSample)
+                        case {1, 8, 16, 32}
+                           oStack.strDataClass = 'single';
+
+                        case 64
+                           oStack.strDataClass = 'double';
+                           
+                        otherwise
+                           error('TIFFStack:UnsupportedFormat', ...
+                              '*** TIFFStack: The sample format of this TIFF stack is not supported.');
+                     end
+                     
+                  otherwise
+                     error('TIFFStack:UnsupportedFormat', ...
+                           '*** TIFFStack: The sample format of this TIFF stack is not supported.');
+               end
+               
+               % - Assign accelerated reading function
+               if (tifflib('isTiled', oStack.TIF))
+                  if (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Chunky))
+                     oStack.fhReadFun = @TS_read_Tiff_tiled_chunky;
+                     
+                  elseif (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Separate))
+                     oStack.fhReadFun = @TS_read_Tiff_tiled_separate;
+                  end
+                  
+               else
+                  if (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Chunky))
+                     oStack.fhReadFun = @TS_read_Tiff_striped_chunky;
+                     
+                  elseif (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Separate))
+                     oStack.fhReadFun = @TS_read_Tiff_striped_separate;
+                  end
+               end
+               
+            else
+               % - Read TIFF header for tiffread29
+               [oStack.TIF, oStack.HEADER] = tiffread29_header(strFilename);
+
+               % - Use tiffread29 to get the data class for this tiff
+               fPixel = tiffread29_readimage(oStack.TIF, oStack.HEADER, 1);
+               fPixel = fPixel(1, 1, :);
+               oStack.strDataClass = class(fPixel);
+            end
             
             % - Use imread to get the data class for this tiff
             % fPixel = imread(strFilename, 'TIFF', 1, 'PixelRegion', {[1 1], [1 1]});
             % oStack.strDataClass = class(fPixel);
             
-            % - Use tiffread29 to get the data class for this tiff
-            fPixel = tiffread29_readimage(oStack.TIF, oStack.HEADER, 1);
-            fPixel = fPixel(1, 1, :);
-            oStack.strDataClass = class(fPixel);
-
             % - Record stack size
-            oStack.vnStackSize = [sInfo(1).Width sInfo(1).Height numel(sInfo) numel(fPixel)];
-            
-%          catch mErr
-%             base_ME = MException('TIFFStack:InvalidFile', ...
-%                   '*** TIFFStack: Could not open file [%s].', strFilename);
-%             new_ME = addCause(base_ME, mErr);
-%             throw(new_ME);
-%          end
+            oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
+
+            % - Initialise dimension order
+            oStack.vnDimensionOrder = 1:numel(oStack.vnDataSize);
+
+         catch mErr
+            base_ME = MException('TIFFStack:InvalidFile', ...
+                  '*** TIFFStack: Could not open file [%s].', strFilename);
+            new_ME = addCause(base_ME, mErr);
+            throw(new_ME);
+         end
       end
       
       % delete - DESTRUCTOR
       function delete(oStack)
-         % - Close the TIFF file, if opened by tiffread29_header
-         if (isfield(oStack.TIF, 'file'))
-            fclose(oStack.TIF.file);
+         if (oStack.bUseTiffLib)
+            % - Close the TIFF file, if opened by TiffLib
+            tifflib('close', oStack.TIF);
+
+         else
+            % - Close the TIFF file, if opened by tiffread29_header
+            if (isfield(oStack.TIF, 'file'))
+               fclose(oStack.TIF.file);
+            end
          end
       end
 
@@ -130,31 +259,46 @@ classdef TIFFStack < handle
          switch S(1).type
             case '()'
                nNumDims = numel(S.subs);
-               nNumStackDims = numel(oStack.vnStackSize);
+%                nNumStackDims = numel(oStack.vnDataSize);
+               nNumTotalDims = numel(oStack.vnDimensionOrder);
+               
+               % - Inverse permute index order
+               vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                
                % - Check dimensionality and trailing dimensions
                if (nNumDims == 1)
                   % - Translate from linear refs to indices
-                  nNumDims = nNumStackDims;
+                  nNumDims = nNumTotalDims;
                   
                   % - Translate colon indexing
                   if (isequal(S.subs{1}, ':'))
-                     S.subs{1} = (1:prod(oStack.vnStackSize))';
+                     S.subs{1} = (1:prod(oStack.vnDataSize))';
                   end
                   
-                  % - Get equivalent subscripted indexes
-                  [S.subs{1:nNumDims}] = ind2sub(oStack.vnStackSize, S.subs{1});
+                  % - Get equivalent subscripted indexes and permute
+                  vnTensorSize = size(oStack);
+                  [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, subs.subs{1});
+                  [S.subs{1}] = ind2sub(oStack.vnDataSize, cIndices{vnInvOrder});
                   
-               elseif (nNumDims < nNumStackDims)
-                  % - Assume trailing references are ':"
-                  S.subs(nNumDims+1:nNumStackDims) = {':'};
+               elseif (nNumDims < nNumTotalDims)
+                  % - Assume trailing references are ':'
+                  S.subs(nNumDims+1:nNumTotalDims) = {':'};
+
+                  % - Permute index order
+                  S.subs = S.subs(vnInvOrder);
                   
-               elseif (nNumDims > nNumStackDims)
+               elseif (nNumDims == nNumTotalDims)
+                  % - Simply permute and access tensor
+                  
+                  % - Permute index order
+                  S.subs = S.subs(vnInvOrder);
+                  
+               else % (nNumDims > nNumTotalDims)
                   % - Check for non-colon references
                   vbNonColon = cellfun(@(c)(~ischar(c) | ~isequal(c, ':')), S.subs);
                   
                   % - Check only trailing dimensions
-                  vbNonColon(1:nNumStackDims) = false;
+                  vbNonColon(1:nNumTotalDims) = false;
                   
                   % - Check trailing dimensions for non-'1' indices
                   if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
@@ -164,15 +308,28 @@ classdef TIFFStack < handle
                   end
                   
                   % - Only keep relevant dimensions
-                  S.subs = S.subs(1:nNumStackDims);
+                  S.subs = S.subs(1:nNumTotalDims);
+                  
+                  % - Permute index order
+                  S.subs = S.subs(vnInvOrder);
+
+                  % - Permute index order
+                  S.subs = S.subs(vnInvOrder);
                end
                
-               % - Access stack
-               tfData = TS_read_data_tiffread(oStack, S.subs);
+               % - Access stack (tifflib or tiffread)
+               if (oStack.bUseTiffLib)
+                  tfData = TS_read_data_Tiff(oStack, S.subs);
+               else
+                  tfData = TS_read_data_tiffread(oStack, S.subs);
+               end
+               
+               % - Permute dimensions
+               tfData = permute(tfData, oStack.vnDimensionOrder);
                
                % - Reshape return data to concatenate trailing dimensions (just as
                % matlab does)
-               if (nNumDims < nNumStackDims)
+               if (nNumDims < nNumTotalDims)
                   cnSize = num2cell(size(tfData));
                   tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
                end
@@ -188,8 +345,8 @@ classdef TIFFStack < handle
       
 %% --- Overloaded size
       function [varargout] = size(oStack, vnDimensions)
-         % - Return the size of the stack
-         vnSize = oStack.vnStackSize;
+         % - Return the size of the stack, permuted
+         vnSize = oStack.vnDataSize(oStack.vnDimensionOrder);
          
          % - Return specific dimension(s)
          if (exist('vnDimensions', 'var'))
@@ -223,6 +380,27 @@ classdef TIFFStack < handle
             % - Deal out trailing dimensions as '1'
             varargout(numel(vnSize)+1:nNumArgout) = {1};
          end
+      end
+      
+      % permute - METHOD Overloaded permute function
+      function [oStack] = permute(oStack, vnNewOrder)
+         oStack.vnDimensionOrder(1:numel(vnNewOrder)) = oStack.vnDimensionOrder(vnNewOrder);
+      end
+      
+      % ipermute - METHOD Overloaded ipermute function
+      function [oStack] = ipermute(oStack, vnOldOrder)
+         vnNewOrder(vnOldOrder) = 1:numel(vnOldOrder);
+         oStack = permute(oStack, vnNewOrder);
+      end
+      
+      % ctranspose - METHOD Overloaded ctranspose function
+      function [oStack] = cstranspose(oStack)
+         oStack = transpose(oStack);
+      end
+      
+      % transpose - METHOD Overloaded transpose function
+      function [oStack] = transpose(oStack)
+         oStack = permute(oStack, [2 1]);
       end
       
 %% --- Property accessors
@@ -259,14 +437,14 @@ function [tfData] = TS_read_data_imread(oStack, cIndices) %#ok<DEFNU>
    vbIsColon = cellfun(@(c)(isequal(c, ':')), cIndices);
    
    for (nColonDim = find(vbIsColon))
-      cIndices{nColonDim} = 1:oStack.vnStackSize(nColonDim);
+      cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
    end
       
    % - Check ranges
    vnMinRange = cellfun(@(c)(min(c)), cIndices);
    vnMaxRange = cellfun(@(c)(max(c)), cIndices);
    
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnStackSize))
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
       error('TIFFStack:badsubscript', ...
             '*** TIFFStack: Index exceeds stack dimensions.');
    end
@@ -274,7 +452,7 @@ function [tfData] = TS_read_data_imread(oStack, cIndices) %#ok<DEFNU>
    % - Allocate large tensor
    vnBlockSize = vnMaxRange(1:2) - vnMinRange(1:2) + [1 1];
    vnBlockSize(3) = numel(cIndices{3});
-   vnBlockSize(4) = oStack.vnStackSize(4);
+   vnBlockSize(4) = oStack.vnDataSize(4);
    tfDataBlock = zeros(vnBlockSize, oStack.strDataClass);
    cBlock = {[vnMinRange(1) vnMaxRange(1)] [vnMinRange(2) vnMaxRange(2)]};
    
@@ -329,23 +507,17 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices)
    vbIsColon = cellfun(@(c)(ischar(c) & isequal(c, ':')), cIndices);
    
    for (nColonDim = find(vbIsColon))
-      cIndices{nColonDim} = 1:oStack.vnStackSize(nColonDim);
+      cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
    end
       
    % - Check ranges
    vnMinRange = cellfun(@(c)(min(c)), cIndices);
    vnMaxRange = cellfun(@(c)(max(c)), cIndices);
    
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnStackSize))
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
       error('TIFFStack:badsubscript', ...
             '*** TIFFStack: Index exceeds stack dimensions.');
    end
-   
-   % - Allocate large tensor
-   vnBlockSize = oStack.vnStackSize(1:2);
-   vnBlockSize(3) = numel(cIndices{3});
-   vnBlockSize(4) = oStack.vnStackSize(4);
-   tfDataBlock = zeros(vnBlockSize, oStack.strDataClass);
    
    % - Read data block
    try
@@ -373,6 +545,167 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices)
    end
 end
 
+
+% TS_read_data_Tiff - FUNCTION Read the requested pixels from the TIFF file (using tifflib)
+%
+% Usage: [tfData] = TS_read_data_Tiff(oStack, cIndices)
+%
+% 'oStack' is a TIFFStack.  'cIndices' are the indices passed in from subsref.
+% Colon indexing will be converted to full range indexing.  cIndices is a cell
+% array with the format {rows, cols, frames, slices}.  Slices are RGB or CMYK
+% or so on.
+
+function [tfData] = TS_read_data_Tiff(oStack, cIndices)
+   % - Convert colon indexing
+   vbIsColon = cellfun(@(c)(ischar(c) & isequal(c, ':')), cIndices);
+   
+   for (nColonDim = find(vbIsColon))
+      cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
+   end
+      
+   % - Check ranges
+   vnMinRange = cellfun(@(c)(min(c)), cIndices);
+   vnMaxRange = cellfun(@(c)(max(c)), cIndices);
+   
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
+      error('TIFFStack:badsubscript', ...
+            '*** TIFFStack: Index exceeds stack dimensions.');
+   end
+   
+   % - Allocate tensor for returning data and single frame buffer
+   vnBlockSize = oStack.vnDataSize(1:2);
+   vnBlockSize(3) = numel(cIndices{3});
+   vnBlockSize(4) = oStack.vnDataSize(4);
+   tfData = zeros(vnBlockSize, oStack.strDataClass);
+   tfImage = zeros(vnBlockSize(1:2), oStack.strDataClass);
+   
+   w = oStack.vnDataSize(2);
+   h = oStack.vnDataSize(1);
+   rps = min(oStack.sImageInfo(1).RowsPerStrip, h);   
+   tw = min(oStack.sImageInfo(1).TileWidth, w);
+   th = min(oStack.sImageInfo(1).TileLength, h);
+   spp = oStack.sImageInfo(1).SamplesPerPixel;
+   
+   tlStack = oStack.TIF;
+   
+   try
+      % - Loop over images in stack
+      for (nImage = 1:numel(cIndices{3}))
+         % - Skip to this image in stack
+         tifflib('setDirectory', tlStack, cIndices{3}(nImage));
+         
+         % - Read data from this image, overwriting frame buffer
+         tfImage = oStack.fhReadFun(tfImage, tlStack, spp, h, rps, tw, th);
+         tfData(:, :, nImage) = tfImage;
+      end
+      
+   catch mErr
+      % - Record error state
+      base_ME = MException('TIFFStack:ReadError', ...
+                           '*** TIFFStack: Could not read data from image file.');
+      new_ME = addCause(base_ME, mErr);
+      throw(new_ME);
+   end
+   
+   % - Do we need to resample the data block?
+   bResample = any(~vbIsColon(1:3));
+   if (bResample)
+      tfData = tfData(cIndices{1}, cIndices{2}, :, cIndices{4});
+   end
+   
+   % - Invert data if requested
+   if (oStack.bInvert)
+      tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
+   end
+end
+
+% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% striped separate TIFF files
+function [tfImage] = TS_read_Tiff_striped_separate(tfImage, tlStack, spp, h, rps, ~, ~)
+   for r = 1:rps:h
+      row_inds = r:min(h,r+rps-1);
+      for k = 1:spp
+         stripNum = tifflib('computeStrip', oStack.TIF, r, k);
+         tfImage(row_inds,:,k) = tifflib('readEncodedStrip', tlStack, stripNum);
+      end
+   end
+end
+
+% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% striped chunk TIFF files
+function [tfImage] = TS_read_Tiff_striped_chunky(tfImage, tlStack, ~, h, rps, ~, ~)
+   for r = 1:rps:h
+      row_inds = r:min(h,r+rps-1);
+      stripNum = tifflib('computeStrip', tlStack, r);
+      tfImage(row_inds,:,:) = tifflib('readEncodedStrip', tlStack, stripNum);
+   end
+end
+
+% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% tiled separate TIFF files
+function [tfImage] = TS_read_Tiff_tiled_separate(tfImage, tlStack, spp, ~, ~, tWidth, tHeight)
+   for r = 1:tHeight:h
+      row_inds = r:min(h,r+tHeight-1);
+      for c = 1:tWidth:w
+         col_inds = c:min(w,c+tWidth-1);
+         for k = 1:spp
+            tileNumber = tifflib('computeTile', tlStack, [r c], k);
+            tfImage(row_inds,col_inds,k) = tifflib('readEncodedTile', tlStack, tileNumber);
+         end
+      end
+   end
+end
+
+% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% tiled chunky TIFF files
+function [tfImage] = TS_read_Tiff_tiled_chunky(tfImage, tlStack, ~, ~, ~, tWidth, tHeight)
+   for r = 1:tHeight:h
+      row_inds = r:min(h,r+tHeight-1);
+      for c = 1:tWidth:w
+         col_inds = c:min(w,c+tWidth-1);
+         tileNumber = tifflib('computeTile', tlStack, [r c]);
+         tfImage(row_inds,col_inds,:) = tifflib('readEncodedTile', tlStack, tileNumber);
+      end
+   end
+end
+
+function tagValue = TiffgetTag(oTiff,tagId)
+% getTag  Retrieve tag from image.
+%   tagValue = getTag(tagId) retrieves the value of the tag tagId
+%   from the current directory.  tagId may be specified either via
+%   the Tiff.TagID property or as a char string.
+%
+%   This method corresponds to the TIFFGetField function in the
+%   LibTIFF C API.  To use this method, you must be familiar with
+%   LibTIFF version 3.7.1 as well as the TIFF specification and
+%   technical notes.  This documentation may be referenced at
+%   <http://www.remotesensing.org/libtiff/document.html>.
+%
+%   Example:
+%
+%   t = Tiff('example.tif','r');
+%   % Specify tag by tag number.
+%   width = t.getTag(Tiff.TagID.ImageWidth);
+%
+%   % Specify tag by tag name.
+%   width = t.getTag('ImageWidth');
+%
+%   See also setTag
+%
+%
+
+   switch(class(tagId))
+      case 'char'
+         % The user gave a char id for the tag.
+         tagValue = tifflib('getField',oTiff,Tiff.TagID.(tagId));
+         
+      otherwise
+         % Assume numeric.
+         tagValue = tifflib('getField',oTiff,tagId);
+   end
+end
+
+
 % get_full_file_path - FUNCTION Calculate the absolute path to a given (possibly relative) filename
 %
 % Usage: strFullPath = get_full_file_path(strFile)
@@ -384,12 +717,25 @@ end
 
 function strFullPath = get_full_file_path(strFile)
 
-   [strDir, strName, strExt] = fileparts(strFile);
-
-   if (isempty(strDir))
-      strDir = '.';
+   try
+      fid = fopen(strFile);
+      strFile = fopen(fid);
+      
+      [strDir, strName, strExt] = fileparts(strFile);
+      
+      if (isempty(strDir))
+         strDir = '.';
+         strFullDirPath = cd(cd(strDir));
+         strFullPath = fullfile(strFullDirPath, [strName strExt]);
+      else
+         strFullPath = strFile;
+      end
+      
+   catch mErr
+      % - Record error state
+      base_ME = MException('TIFFStack:ReadError', ...
+         '*** TIFFStack: Could not open file [%s].', strFile);
+      new_ME = addCause(base_ME, mErr);
+      throw(new_ME);
    end
-
-   strFullDirPath = cd(cd(strDir));
-   strFullPath = fullfile(strFullDirPath, [strName strExt]);
 end
