@@ -132,7 +132,7 @@ classdef TIFFStack < handle
                nDataClass = TiffgetTag(oStack.TIF, 'SampleFormat');
                switch (nDataClass)
                   case Tiff.SampleFormat.UInt
-                     switch (sInfo(1).BitsPerSample)
+                     switch (sInfo(1).BitsPerSample(1))
                         case 1
                            oStack.strDataClass = 'logical';
                            
@@ -154,7 +154,7 @@ classdef TIFFStack < handle
                      end
                      
                   case Tiff.SampleFormat.Int
-                     switch (sInfo.BitsPerSample)
+                     switch (sInfo.BitsPerSample(1))
                         case 1
                            oStack.strDataClass = 'logical';
                            
@@ -176,7 +176,7 @@ classdef TIFFStack < handle
                      end
                      
                   case Tiff.SampleFormat.IEEEFP
-                     switch (sInfo.BitsPerSample)
+                     switch (sInfo.BitsPerSample(1))
                         case {1, 8, 16, 32}
                            oStack.strDataClass = 'single';
 
@@ -577,7 +577,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
    vnBlockSize(3) = numel(cIndices{3});
    vnBlockSize(4) = oStack.vnDataSize(4);
    tfData = zeros(vnBlockSize, oStack.strDataClass);
-   tfImage = zeros(vnBlockSize(1:2), oStack.strDataClass);
+   tfImage = zeros([vnBlockSize(1:2) 1 vnBlockSize(4)], oStack.strDataClass);
    
    w = oStack.vnDataSize(2);
    h = oStack.vnDataSize(1);
@@ -596,7 +596,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
          
          % - Read data from this image, overwriting frame buffer
          tfImage = oStack.fhReadFun(tfImage, tlStack, spp, h, rps, tw, th);
-         tfData(:, :, nImage) = tfImage;
+         tfData(:, :, nImage, :) = tfImage;
       end
       
    catch mErr
