@@ -10,6 +10,9 @@ function [mfFrameOffsets] = AlignTrials(oStack, vnChannel, nUpsampling, mfRefere
 % frame offsets returned in 'mfFrameOffsets'.  The alignment correction
 % will also be applied to the stack.
 
+% Author: Dylan Muir <muir@hifo.uzh.ch>
+% Created: 2012
+
 % -- Defaults
 
 DEF_vnChannel = 1;

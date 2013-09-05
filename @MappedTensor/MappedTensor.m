@@ -342,7 +342,7 @@ classdef MappedTensor < handle
          % - Handle different numbers of referencing dimensions
          if (nNumDims == 1)
             % - Translate from linear refs to indices
-            nNumDims = numel(mtVar.vnDimensionOrder);
+            nNumDims = nNumTotalDims;
             
             % - Translate colon indexing
             if (isequal(subs.subs{1}, ':'))
@@ -354,7 +354,8 @@ classdef MappedTensor < handle
             [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, subs.subs{1});
             
             % - Permute indices and convert back to linear indexing
-            subs.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{mtVar.vnDimensionOrder});
+            vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+            subs.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
             
          elseif (nNumDims < nNumTotalDims)
             % - Assume trailing dimensions are ':'

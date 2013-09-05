@@ -1,5 +1,5 @@
 function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
-          mfRegionTraces, tfTrialResponses, tnFramesInSample, cvfTrialTraces] = ...
+          mfRegionTraces, tfTrialResponses, tnFramesInSample, cvfTrialTraces, mfRawRegionTraces] = ...
    ExtractRegionResponses(fsStack, sRegions, nBlankStimID, fhExtractionFunction, tBaseTimeShift)
 
 % ExtractRegionResponses - FUNCTION Extract responses from identified regions of interest
@@ -124,11 +124,14 @@ fprintf('ExtractRegionResponses...');
 
 % - Extract the region traces
 nNumFrames = size(fsStack, 3);
-[nul, cvfRegionTrace] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, 1:nNumFrames);
+[cmfRawTraces, cvfRegionTrace] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, 1:nNumFrames);
 if ~iscell(cvfRegionTrace)
     mfRegionTraces = cvfRegionTrace;
+    mfRawRegionTraces = nanmean(cmfRawTraces, 2);
 else
     mfRegionTraces = vertcat(cvfRegionTrace{:});
+    mfRawRegionTraces = cellfun(@(c)nanmean(c, 2), cmfRawTraces, 'UniformOutput', 'false');
+    mfRawRegionTraces = vertcat(mfRawRegionTraces{:});
 end
 
 % - Extract the region blanks

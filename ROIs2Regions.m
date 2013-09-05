@@ -1,6 +1,32 @@
 function [sRegions] = ROIs2Regions(cvsROIs, vnImageSize)
 
-% - Build a structure
+% ROIs2Regions - FUNCTION Convert a set of imported ImageJ ROIs into a Matlab regions structure
+%
+% Usage: [sRegions] = ROIs2Regions(cvsROIs, vnImageSize)
+%
+% 'cvsROIs' is a cell array of ImageJ ROI structures, as imported by
+% ReadImageJROI. 'vnImageSize' is a vector [M N] containing the size of the
+% image in pixels.
+%
+% 'sRegions' will be a structure compatible with the Matlab regions
+% structure format, as returned by bwconncomp. It will contain one region
+% for each compatible ROI in 'cvsROIs'.
+%
+% Only a subset of ImageJ ROI types is supported for conversion:
+% 'rectangle', oval', 'polygon' and 'freehand'.
+
+% Author: Dylan Muir <muir@hifo.uzh.ch>
+% Created: 2011
+
+% - Check arguments
+
+if (nargin < 2)
+   disp('*** ROIs2Regions: Incorrect usage.');
+   help ROIs2Regions;
+   return;
+end
+
+% - Build a regions structure
 sRegions.Connectivity = 8;
 sRegions.ImageSize = vnImageSize;
 sRegions.NumObjects = numel(cvsROIs);
@@ -39,3 +65,4 @@ for (nROIIndex = numel(cvsROIs):-1:1)
    end
 end
 
+% --- END of ROIs2Regions.m ---

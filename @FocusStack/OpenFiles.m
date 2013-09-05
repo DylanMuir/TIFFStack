@@ -141,6 +141,9 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
    % - Construct TIFFStack
    oStack.vhMemMapFileHandles{nFile} = TIFFStack(strFullPath);
    
+   % - Transpose the stack to match old usage
+   oStack.vhMemMapFileHandles{nFile} = transpose(oStack.vhMemMapFileHandles{nFile});
+   
    % - Try to convert a Helioscan header, if it exists
    try
       sHeader = ConvertHelioscanHeader(oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).ImageDescription);

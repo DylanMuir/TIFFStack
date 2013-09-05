@@ -4,6 +4,8 @@ function hFigure = MakeRFDistributionFigure(sRFAnalysis, vfStimOffsetDeg, fStimR
 %
 % Usage: hFigure = MakeRFDistributionFigure(sRFAnalysis, vfStimOffsetDeg, fStimRadiusDeg, vnPlotRegions)
 %
+% 
+
 % Author: Dylan Muir <muir@hifo.uzh.ch>
 % Created: 25th March, 2013
 
