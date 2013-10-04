@@ -10,7 +10,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string.h>e
 #include <ctype.h>
 #include <stdint.h>
 #include <errno.h>
@@ -86,20 +86,22 @@ void CmdCloseFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 
+
 // -- Endian-management functions
 
-void betoh16(uint16_t *vnData, uint64_t uNumEntries);
-void betoh32(uint32_t *vnData, uint64_t uNumEntries);
-void betoh64(uint64_t *vnData, uint64_t uNumEntries);
-void letoh16(uint16_t *vnData, uint64_t uNumEntries);
-void letoh32(uint32_t *vnData, uint64_t uNumEntries);
-void letoh64(uint64_t *vnData, uint64_t uNumEntries);
-void htobe16(uint16_t *vnData, uint64_t uNumEntries);
-void htobe32(uint32_t *vnData, uint64_t uNumEntries);
-void htobe64(uint64_t *vnData, uint64_t uNumEntries);
-void htole16(uint16_t *vnData, uint64_t uNumEntries);
-void htole32(uint32_t *vnData, uint64_t uNumEntries);
-void htole64(uint64_t *vnData, uint64_t uNumEntries);
+// - Function definitions
+void buf_betoh16(uint16_t *vnData, uint64_t uNumEntries);
+void buf_betoh32(uint32_t *vnData, uint64_t uNumEntries);
+void buf_betoh64(uint64_t *vnData, uint64_t uNumEntries);
+void buf_letoh16(uint16_t *vnData, uint64_t uNumEntries);
+void buf_letoh32(uint32_t *vnData, uint64_t uNumEntries);
+void buf_letoh64(uint64_t *vnData, uint64_t uNumEntries);
+void buf_htobe16(uint16_t *vnData, uint64_t uNumEntries);
+void buf_htobe32(uint32_t *vnData, uint64_t uNumEntries);
+void buf_htobe64(uint64_t *vnData, uint64_t uNumEntries);
+void buf_htole16(uint16_t *vnData, uint64_t uNumEntries);
+void buf_htole32(uint32_t *vnData, uint64_t uNumEntries);
+void buf_htole64(uint64_t *vnData, uint64_t uNumEntries);
 
 void *GetEndianSwapper(size_t nDataElemSize, bool bBigEndian);
 
@@ -1001,62 +1003,62 @@ void ByteSwapBuffer64(uint64_t *vnData, uint64_t uNumEntries) {
    }
 }
 
-void betoh16(uint16_t *vnData, uint64_t uNumEntries) {
+void buf_betoh16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-void betoh32(uint32_t *vnData, uint64_t uNumEntries) {
+void buf_betoh32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-void betoh64(uint64_t *vnData, uint64_t uNumEntries) {
+void buf_betoh64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-void letoh16(uint16_t *vnData, uint64_t uNumEntries) {
+void buf_letoh16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-void letoh32(uint32_t *vnData, uint64_t uNumEntries) {
+void buf_letoh32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-void letoh64(uint64_t *vnData, uint64_t uNumEntries) {
+void buf_letoh64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-void htobe16(uint16_t *vnData, uint64_t uNumEntries) {
+void buf_htobe16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-void htobe32(uint32_t *vnData, uint64_t uNumEntries) {
+void buf_htobe32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-void htobe64(uint64_t *vnData, uint64_t uNumEntries) {
+void buf_htobe64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (!is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
 
-void htole16(uint16_t *vnData, uint64_t uNumEntries) {
+void buf_htole16(uint16_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer16(vnData, uNumEntries);
 }
 
-void htole32(uint32_t *vnData, uint64_t uNumEntries) {
+void buf_htole32(uint32_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer32(vnData, uNumEntries);
 }
 
-void htole64(uint64_t *vnData, uint64_t uNumEntries) {
+void buf_htole64(uint64_t *vnData, uint64_t uNumEntries) {
 	if (is_bigendian())
 		ByteSwapBuffer64(vnData, uNumEntries);
 }
@@ -1068,23 +1070,23 @@ void *GetEndianSwapper(size_t nDataElemSize, bool bBigEndian) {
 			
 		case 2:
 			if (bBigEndian) {
-				return &htobe16;
+				return &buf_htobe16;
 			} else {
-				return &htole16;
+				return &buf_htole16;
 			}
 			
 		case 4:
 			if (bBigEndian) {
-				return &htobe32;
+				return &buf_htobe32;
 			} else {
-				return &htole32;
+				return &buf_htole32;
 			}
 			
 		case 8:
 			if (bBigEndian) {
-				return &htobe64;
+				return &buf_htobe64;
 			} else {
-				return &htole64;
+				return &buf_htole64;
 			}
 
 		default:
