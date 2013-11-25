@@ -88,7 +88,7 @@ fhExtractionFun = @(fsData, vnPixels, vnFrames)fhExtractPeak(fsData, vnPixels, v
       % - Should we search over a longer frame range?
       if (~isempty(nFrameRange))
          nNumOrigFrames = numel(vnFrames);
-         [vnFrames, ~, vnOrigFrames] = unique([vnFrames(:)' min(vnFrames) + (1:nFrameRange)]);
+         [vnFrames, ~, vnOrigFrames] = unique([vnFrames(:)' min(min(vnFrames) + (1:nFrameRange), size(fsData, 3))]);
          vnOrigFrames = vnOrigFrames(1:nNumOrigFrames);
       else
          vnOrigFrames = 1:numel(vnFrames);

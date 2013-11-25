@@ -233,7 +233,7 @@ nOptions = fread(fidROI, 1, 'int16');
 nArrowStyle = fread(fidROI, 1, 'int16');
 nArrowHeadSize = fread(fidROI, 1, 'uint8');
 nRoundedRectArcSize = fread(fidROI, 1, 'int16');
-nPosition = fread(fidROI, 1, 'int16');
+nPosition = fread(fidROI, 1, 'int16'); %#ok<NASGU>
 
 % - Seek to get aspect ratio
 fseek(fidROI, 52, 'bof');
@@ -297,7 +297,7 @@ switch nTypeID
          % - This is an ellipse
          sROI.strSubtype = 'Ellipse';
          sROI.vfEllipsePoints = vfLinePoints;
-         sRoi.fAspectRatio = fAspectRatio;
+         sROI.fAspectRatio = fAspectRatio;
       end
       
    case 8
@@ -380,7 +380,7 @@ fclose(fidROI);
       % - Offset by top left ROI bound
       vnX = vnX + sROI.vnRectBounds(2);
       vnY = vnY + sROI.vnRectBounds(1);
-      
+
       mnCoordinates = [vnX vnY];
    end
 
@@ -446,15 +446,15 @@ fclose(fidROI);
       if (iscell(varargin{1}))
          cellArray = CellFlatten(varargin{1}{:});
       else
-         cellArray = {varargin{1}};
+         cellArray = varargin(1);
       end
       
       for (nIndexArg = 2:length(varargin)) %#ok<FORPF>
          if (iscell(varargin{nIndexArg}))
             cellReturn = CellFlatten(varargin{nIndexArg}{:});
-            cellArray = [cellArray cellReturn{:}];
+            cellArray = [cellArray cellReturn{:}]; %#ok<AGROW>
          else
-            cellArray = [cellArray varargin{nIndexArg}];
+            cellArray = [cellArray varargin{nIndexArg}]; %#ok<AGROW>
          end
       end
       

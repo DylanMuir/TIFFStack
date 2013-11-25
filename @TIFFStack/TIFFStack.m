@@ -154,7 +154,7 @@ classdef TIFFStack < handle
                      end
                      
                   case Tiff.SampleFormat.Int
-                     switch (sInfo.BitsPerSample(1))
+                     switch (sInfo(1).BitsPerSample(1))
                         case 1
                            oStack.strDataClass = 'logical';
                            
@@ -176,7 +176,7 @@ classdef TIFFStack < handle
                      end
                      
                   case Tiff.SampleFormat.IEEEFP
-                     switch (sInfo.BitsPerSample(1))
+                     switch (sInfo(1).BitsPerSample(1))
                         case {1, 8, 16, 32}
                            oStack.strDataClass = 'single';
 
