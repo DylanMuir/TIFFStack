@@ -6,7 +6,7 @@
 % To extract frames:
 %    fsStack(:, :, vnFrames, vnChannels);
 %    fsStack(vnPixels, vnFrames, vnChannels);
-%    fsStack.AlignedFrames(:, :, :, :)
+%    fsStack.AlignedStack(:, :, :, :)
 %    fsStack.RawStack(:, :, :, :);
 %
 % To accumulate over the stack:
@@ -18,6 +18,9 @@
 %
 % To assign blank frames:
 %    fsStack.<a href="matlab:help AssignBlankFrame">AssignBlankFrame</a>(...)
+%
+% To extract blank frames:
+%    [mfMean, mfStd] = fsStack.BlankFrames(:, :, vnFrames) (channels are not supported)
 %
 % <a href="matlab:methods('FocusStack')">List methods</a>, <a href="matlab:properties('FocusStack')">properties</a>
 % 
