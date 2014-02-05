@@ -130,7 +130,7 @@ if ~iscell(cvfRegionTrace)
     mfRawRegionTraces = nanmean(cmfRawTraces, 2);
 else
     mfRegionTraces = vertcat(cvfRegionTrace{:});
-    mfRawRegionTraces = cellfun(@(c)nanmean(c, 2), cmfRawTraces, 'UniformOutput', false);
+    mfRawRegionTraces = cellfun(@(c)nanmean(c, 1), cmfRawTraces, 'UniformOutput', false);
     mfRawRegionTraces = vertcat(mfRawRegionTraces{:});
 end
 
