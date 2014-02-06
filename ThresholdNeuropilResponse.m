@@ -1,10 +1,12 @@
 function [sNeuropilZThresholds] = ...
-   ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, nBlankStimID, fhExtractionFunction)
+   ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, nBlankStimID, fhExtractionFunction, tBaseTimeShift)
 
 % ThresholdNeuropilResponse - FUNCTION Estimate a threshold for rejecting neuropil contaminated responses
 %
 % Usage: [sNeuropilZThresholds] = ...
-%    ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, nBlankStimID, fhExtractionFunction)
+%    ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, nBlankStimID, fhExtractionFunction, tBaseTimeShift)
+% Usage: [sNeuropilZThresholds] = ...
+%    ThresholdNeuropilResponse(fsData, sRegions, vnUseStimulusSeqIDs, fAlpha, vbBlankFrames, fhExtractionFunction, tBaseTimeShift)
 %
 % 'fsData' is a FocusStack object, with blank frames assigned.
 %
@@ -61,6 +63,10 @@ if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
    fhExtractionFunction = ExtractMean;
 end
 
+if (~exist('tBaseTimeShift', 'var'))
+   tBaseTimeShift = [];
+end
+
 
 % -- Get a list of matching stack frames
 
@@ -70,7 +76,7 @@ vnStackSize = size(fsData);
  vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
  vnStimulusSeqID, vtTimeInStimPresentation, ...
  vnPresentationIndex, vbUseFrame] = ...
- 	FrameStimulusInfo(fsData, 1:vnStackSize(3));
+ 	FrameStimulusInfo(fsData, 1:vnStackSize(3), tBaseTimeShift);
 
 vbMatchingStackFrames = ismember(vnStimulusSeqID, vnUseStimulusSeqIDs);
 
@@ -101,8 +107,11 @@ nNumNeuropilPixels = nnz(mbNeuropil);
 nNumStim = numel(vnUseStimulusSeqIDs);
 
 % -- Extract blank frames
-
-vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+if (~isscalar(nBlankStimID))
+   vbBlankFrames = nBlankStimID;
+else
+   vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+end
 
 [mfNeuropilBlankTrace] = fhExtractionFunction(fsData, mbNeuropil(:), vbBlankFrames);
 mfNeuropilBlankTrace = double(mfNeuropilBlankTrace);

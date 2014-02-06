@@ -4,7 +4,7 @@ function OpenFiles(oStack)
 
    nNumFiles = numel(oStack.cstrFilenames);
 
-%    try
+   try
       for (nFile = 1:nNumFiles)
          % - Extract a full file path
          strFullPath = get_full_file_path(oStack.cstrFilenames{nFile});
@@ -34,12 +34,12 @@ function OpenFiles(oStack)
 
       end
 
-%    catch sErr
-%       % - Display an error message
-%       disp('*** FocusStack: Could not open the specified raw data files.');
-% 
-%       rethrow(sErr);
-%    end
+   catch sErr
+      % - Display an error message
+      disp('*** FocusStack: Could not open the specified raw data files.');
+
+      rethrow(sErr);
+   end
 
 end
 
@@ -110,7 +110,7 @@ function OpenFocusStack(oStack, strFullFilePath, strFilenameOnly, nFile) %#ok<IN
 
    % - Check zoom
    if (isempty(oStack.fPixelsPerUM))
-      oStack.fPixelsPerUM = sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor);
+      oStack.fPixelsPerUM = 2*sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor);
 
    elseif (~isequal(oStack.fPixelsPerUM, 2*sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor)))
       warning('FocusStack:DifferentZoom', ...
@@ -140,6 +140,9 @@ end
 function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
    % - Construct TIFFStack
    oStack.vhMemMapFileHandles{nFile} = TIFFStack(strFullPath);
+   
+   % - Transpose the stack to match old usage
+   oStack.vhMemMapFileHandles{nFile} = transpose(oStack.vhMemMapFileHandles{nFile});
    
    % - Try to convert a Helioscan header, if it exists
    try

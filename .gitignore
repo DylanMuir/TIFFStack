@@ -8,3 +8,4 @@ bin_frames_time
 *.mexmaci64
 
 *.mexw64
+@TIFFStack/.DS_Store

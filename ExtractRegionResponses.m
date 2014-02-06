@@ -1,12 +1,12 @@
 function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
-          mfRegionTraces, tfTrialResponses, tnFramesInSample, cfTrialTraces] = ...
-   ExtractRegionResponses(fsStack, sRegions, nBlankStimID, fhExtractionFunction)
+          mfRegionTraces, tfTrialResponses, tnFramesInSample, cvfTrialTraces, mfRawRegionTraces] = ...
+   ExtractRegionResponses(fsStack, sRegions, nBlankStimID, fhExtractionFunction, tBaseTimeShift)
 
 % ExtractRegionResponses - FUNCTION Extract responses from identified regions of interest
 %
 % Usage: [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
-%         tfTrialResponses, tnFramesInSample, cfTrialTraces] = ...
-%           ExtractRegionResponses(fsStack, sRegions, nBlankStimID, <, fhExtractionFunction>)
+%         tfTrialResponses, tnFramesInSample, cvfTrialTraces] = ...
+%           ExtractRegionResponses(fsStack, sRegions, nBlankStimID, <, fhExtractionFunction, tBaseTimeShift>)
 %
 % 'fsStack' is a FocusStack object.  If stimulus information is embedded (ie
 % 'vtStimulusDirations', 'vtStimulusStartTimes', 'vtStimulusEndTimes',
@@ -36,6 +36,11 @@ function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
 %
 % If 'fhExtractionFunction' is not supplied, the default will be to extract the
 % time and space average of channel 1.
+%
+% The optional parameter 'tBaseTimeShift' shifts the effective stimulus
+% start and end times by the provided amount (in seconds; positive or
+% negative).  Use this to shif the analysed frames in the stack earlier or
+% later. (Default: Not used).  See FrameStimulusInfo for more information.
 %
 % 'vfBlankStds' will be a vector [Rx1], where 'R' is the number of ROIs.  Each
 % element contains the blank standard deviation (corrected for the number of
@@ -69,7 +74,7 @@ function [vfBlankStds, mfStimMeanResponses, mfStimStds, ...
 % element in 'tfTrialResponses'.  For example, it could be the number of
 % samples averaged together to form a mean.
 %
-% 'cfTrialTraces' will be a cell tensor {RxSxM}, conventions as above.
+% 'cvfTrialTraces' will be a cell tensor {RxSxM}, conventions as above.
 % Each cell element will contain the raw data trace for the corresponding
 % region, stimulus and trial.
 
@@ -85,6 +90,10 @@ end
 
 if (~exist('fhExtractionFunction', 'var') || isempty(fhExtractionFunction))
    fhExtractionFunction = ExtractMean;
+end
+
+if (~exist('tBaseTimeShift', 'var'))
+   tBaseTimeShift = [];
 end
 
 nNumFrames = size(fsStack, 3);
@@ -104,61 +113,79 @@ else
       vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
       vnStimulusSeqID, vtTimeInStimPresentation, ...
       vnPresentationIndex, vbUseFrame] = ...
-         FrameStimulusInfo(fsStack, 1:nNumFrames);
+         FrameStimulusInfo(fsStack, 1:nNumFrames, tBaseTimeShift);
 end
 
 
 % -- Average region traces together and extract regions
 
 nNumRegions = sRegions.NumObjects;
-% vnNumTracesRegion = cellfun(@numel, sRegions.PixelIdxList);
-mfRegionTraces = zeros(sRegions.NumObjects, nNumFrames);
+fprintf('ExtractRegionResponses...');
 
-fprintf('ExtractRegionResponses: %4d%%...', 0);
-
-for (nRegion = nNumRegions:-1:1)  % Go backwards to pre-allocate
-   % - Extract the region trace
-   nNumFrames = size(fsStack, 3);
-   [nul, vfRegionTrace] = fhExtractionFunction(fsStack, sRegions.PixelIdxList{nRegion}, 1:nNumFrames);
-   mfRegionTraces(nRegion, :) = vfRegionTrace;
-
-   % - Work out population blank std. devs
-   if (~isempty(nBlankStimID))
-      vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
-   else
-      vbBlankFrames = ~vbUseFrame;
-   end
-   
-   [mfBlankTrace, vfRegionBlank] = fhExtractionFunction(fsStack, sRegions.PixelIdxList{nRegion}, vbBlankFrames);
-   vfBlankStds(nRegion) = nanstd(vfRegionBlank);
-   
-   % -- Extract region responses for each stimulus and trial
-
-   if (bSegmentStack)
-      % -- Extract segments for each stimulus and average
-      
-      if (~exist('tfTrialResponses', 'var'))
-         % - Allocate single-trial storage
-         nNumBlocks = numel(fsStack.cstrFilenames);
-         tfTrialResponses = nan(nNumRegions, nNumStimuli, nNumBlocks);
-      end
-      
-      for (nStimSeqID = nNumStimuli:-1:1)
-         % - Peel off trials
-         for (nTrialID = nNumBlocks:-1:1)
-            % - Find matching stack frames for this trial
-            vbFramesThisTrialStim = (vnStimulusSeqID == nStimSeqID) & (nTrialID == vnBlockIndex) & vbUseFrame;
-            [nul, cfTrialTraces{nRegion, nStimSeqID, nTrialID}, tfTrialResponses(nRegion, nStimSeqID, nTrialID), tnFramesInSample(nRegion, nStimSeqID, nTrialID)] = ...
-               fhExtractionFunction(fsStack, sRegions.PixelIdxList{nRegion}, find(vbFramesThisTrialStim)); %#ok<FNDSB>
-         end
-      end
-   end
-   
-   fprintf('\b\b\b\b\b\b\b\b%4d%%...', round((nNumRegions - nRegion+1) / nNumRegions * 100));
+% - Extract the region traces
+nNumFrames = size(fsStack, 3);
+[cmfRawTraces, cvfRegionTrace] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, 1:nNumFrames);
+if ~iscell(cvfRegionTrace)
+    mfRegionTraces = cvfRegionTrace;
+    mfRawRegionTraces = nanmean(cmfRawTraces, 2);
+else
+    mfRegionTraces = vertcat(cvfRegionTrace{:});
+    mfRawRegionTraces = cellfun(@(c)nanmean(c, 2), cmfRawTraces, 'UniformOutput', false);
+    mfRawRegionTraces = vertcat(mfRawRegionTraces{:});
 end
 
-fprintf('\b\b\b\b\b\b\b\b%4d%%.\n', 100);
-drawnow;
+% - Extract the region blanks
+if (~isempty(nBlankStimID))
+   vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
+else
+   vbBlankFrames = ~vbUseFrame;
+end
+
+[cmfBlankTrace, cvfRegionBlank] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, vbBlankFrames);
+if ~iscell(cmfBlankTrace)
+    cmfBlankTrace = {cmfBlankTrace};
+    cvfRegionBlank = {cvfRegionBlank};
+end
+
+vfBlankStds = cellfun(@nanstd, cvfRegionBlank);
+
+
+% -- Extract region responses for each stimulus and trial
+
+if (bSegmentStack)
+   % -- Extract segments for each stimulus and average
+   fprintf('\b\b\b: %4d%%...', 0);
+
+   % - Allocate single-trial storage
+   nNumBlocks = numel(fsStack.cstrFilenames);
+   tfTrialResponses = nan(nNumRegions, nNumStimuli, nNumBlocks);
+   cvfTrialTraces = cell(nNumRegions, nNumStimuli, nNumBlocks);
+   
+   for (nStimSeqID = nNumStimuli:-1:1)
+      % - Peel off trials
+      for (nTrialID = nNumBlocks:-1:1)
+         % - Find matching stack frames for this trial
+         vbFramesThisTrialStim = (vnStimulusSeqID == nStimSeqID) & (nTrialID == vnBlockIndex) & vbUseFrame;
+         [nul, cvfTrialTracesAll, cfTrialResponses, cnFramesInSample] = ...
+            fhExtractionFunction(fsStack, sRegions.PixelIdxList, vbFramesThisTrialStim);
+
+        if ~iscell(cvfTrialTracesAll)
+            cvfTrialTracesAll = {cvfTrialTracesAll};
+            cfTrialResponses = {cfTrialResponses};
+            cnFramesInSample = {cnFramesInSample};
+        end
+        
+         % - Separate out regions
+         [cvfTrialTraces{:, nStimSeqID, nTrialID}] = deal(cvfTrialTracesAll{:});
+         tfTrialResponses(:, nStimSeqID, nTrialID) = [cfTrialResponses{:}];
+         tnFramesInSample(:, nStimSeqID, nTrialID) = [cnFramesInSample{:}];
+      end
+      fprintf('\b\b\b\b\b\b\b\b%4d%%...', round((nNumStimuli - nStimSeqID+1) / nNumStimuli * 100));
+   end
+   fprintf('\b\b\b\b\b\b\b\b%4d%%.\n', 100);
+   drawnow;
+end
+
 
 if (bSegmentStack)
    % - Calculate averages and std devs

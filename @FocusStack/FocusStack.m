@@ -6,16 +6,21 @@
 % To extract frames:
 %    fsStack(:, :, vnFrames, vnChannels);
 %    fsStack(vnPixels, vnFrames, vnChannels);
-%    fsStack.AlignedFrames(:, :, :, :)
+%    fsStack.AlignedStack(:, :, :, :)
 %    fsStack.RawStack(:, :, :, :);
 %
 % To accumulate over the stack:
 %    fsStack.SummedFrames(:, :, :, :);
 %    fsStack.SummedAlignedFrames(:, :, :, :);
+%
+% To average a region within a frame and extract a mean trace:
 %    fsStack.MeanPixels(:, :, :, :);
 %
 % To assign blank frames:
 %    fsStack.<a href="matlab:help AssignBlankFrame">AssignBlankFrame</a>(...)
+%
+% To extract blank frames:
+%    [mfMean, mfStd] = fsStack.BlankFrames(:, :, vnFrames) (channels are not supported)
 %
 % <a href="matlab:methods('FocusStack')">List methods</a>, <a href="matlab:properties('FocusStack')">properties</a>
 % 
@@ -609,7 +614,11 @@ classdef FocusStack < handle
       % loadobj - LOAD FUNCTION
       function oStack = loadobj(oData)
          % - Construct a new stack
-         oStack = FocusStack(oData.cstrFilenames, oData.bWritable);
+         try
+            oStack = FocusStack(oData.cstrFilenames, oData.bWritable);
+         catch mErr
+            disp('--- Warning: FocusStack is not linked to data files.');
+         end
          
          % - Assign saved values
          if (~isempty(oData.mfFrameShifts))
@@ -655,8 +664,11 @@ classdef FocusStack < handle
             oStack.bConvertToDFF = oData.bConvertToDFF;
          end
          
-         if (isempty(oStack.tFrameDuration))
+         if (~isfield(oStack, 'tFrameDuration') || isempty(oStack.tFrameDuration))
             oStack.tFrameDuration = oData.tFrameDuration;
+         end
+         if (~isempty(oData.mtStimulusUseTimes))
+            oStack.mtStimulusUseTimes = oData.mtStimulusUseTimes;
          end
       end
    end

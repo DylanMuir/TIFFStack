@@ -45,7 +45,7 @@ if (isa(fsData, 'double'))
 else
    % - Get average frames
    strOldNorm = fsData.BlankNormalisation('none');
-   tfAvgSignal = fsData.SummedAlignedFrames(:, :, :, vnChannels);
+   tfAvgSignal = fsData.SummedAlignedFrames(:, :, 1:100, vnChannels);
    vnStackSize = size(fsData, 1:2);
 
    % - Restore normalisation
@@ -84,12 +84,12 @@ if (~bSimplePlot)
    imagesc(tfAvgSignal(:, :, 1)');
    axis equal tight off;
    colormap gray;
-   PlotScaleBar(fPixPerUM, 25, 'tr', 'w-', 'LineWidth', 8);
+   PlotScaleBar(fPixPerUM*1e3, 25e-3, 'tr', 'w-', 'LineWidth', 8);
    
    subplot(1, 3, 2);
    image(imAvg);
    axis equal tight off;
-   PlotScaleBar(fPixPerUM, 25, 'tr', 'w-', 'LineWidth', 8);
+   PlotScaleBar(fPixPerUM*1e3, 25e-3, 'tr', 'w-', 'LineWidth', 8);
    
    subplot(1, 3, 3);
 end
@@ -114,7 +114,7 @@ for (nRegion = reshape(vnLabelRegions, 1, []))
       'FontSize', 12, 'FontWeight', 'bold', 'VerticalAlignment', 'middle', 'HorizontalAlignment', 'center', 'color', 'w');
 end
 
-PlotScaleBar(fPixPerUM, 25, 'tr', 'w-', 'LineWidth', 8);
+PlotScaleBar(fPixPerUM*1e3, 25e-3, 'tr', 'w-', 'LineWidth', 8);
 
 if (nargout == 0)
    clear hFigure;

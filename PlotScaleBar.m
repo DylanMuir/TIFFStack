@@ -73,6 +73,7 @@ switch lower(strPos)
       
       fEndY = vAxis(4) - diff(vAxis([3 4])) * fTopPos;
       fStartY = fEndY;
+      fTextY = fStartY + 5;
       
    case {'tl', 'lt'}
       fWidth = diff(vAxis([1 2]));
@@ -81,6 +82,7 @@ switch lower(strPos)
       
       fEndY = vAxis(4) - diff(vAxis([3 4])) * fTopPos;
       fStartY = fEndY;
+      fTextY = fStartY + 5;
 
    case {'br', 'rb'}
       fWidth = diff(vAxis([1 2]));
@@ -89,6 +91,7 @@ switch lower(strPos)
       
       fEndY = vAxis(4) - diff(vAxis([3 4])) * fBottomPos;
       fStartY = fEndY;
+      fTextY = fStartY - 5;
       
    case {'bl', 'lb'}
       fWidth = diff(vAxis([1 2]));
@@ -97,6 +100,7 @@ switch lower(strPos)
       
       fEndY = vAxis(4) - diff(vAxis([3 4])) * fBottomPos;
       fStartY = fEndY;
+      fTextY = fStartY - 5;
 
    otherwise
       disp('*** PlotScaleBar: Unknown position option.  Must be a combination of l/r and t/b');
@@ -109,6 +113,8 @@ end
 bIsHold = ishold;
 hold on;
 hBar = plot([fStartX fEndX], [fStartY fEndY], PlotOptions{:});
+text(mean([fStartX fEndX]), fTextY, sprintf('%d um', round(fLengthMM * 1e3)), ...
+   'FontSize', 18, 'HorizontalAlignment', 'center', 'Color', get(hBar, 'Color'));
 
 % - Restore hold value
 if (~bIsHold)

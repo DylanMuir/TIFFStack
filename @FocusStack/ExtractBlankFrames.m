@@ -4,7 +4,7 @@ function [tfBlankMean, tfBlankStd] = ExtractBlankFrames(oStack, sSubs)
 %
 % Usage: [tfBlankMean, tfBlankStd] = ExtractBlankFrames(oStack, sSubs)
 %
-% ExtractBlankFrames just pulls pixel traces from the stack correspoding to the
+% ExtractBlankFrames just pulls pixel traces from the stack corresponding to the
 % referenced pixels, but with the pixel data replaced with the blank frame data
 % (and blank standard deviation data).
 %

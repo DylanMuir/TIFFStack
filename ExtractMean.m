@@ -36,29 +36,87 @@ fhExtractMean = @(fsData, vnPixels, vnFrames)fhExtractMeanFun(fsData, vnPixels, 
 
 % --- END of ExtractMean FUNCTION ---
 
-   function [mfRawTrace, vfRegionTrace, fRegionResponse, nFramesInSample, vfPixelResponse] = ...
-         fhExtractMeanFun(fsData, vnPixels, vnFrames, nChannel, bUsedFF)
+   function [cmfRawTrace, cvfRegionTrace, cfRegionResponse, cnFramesInSample, cvfPixelResponse] = ...
+         fhExtractMeanFun(fsData, cvnPixels, vnFrames, nChannel, bUsedFF)
       
-%       if (numel(find(vnFrames)) == size(fsData, 3))
-%          for (nFrame = numel(vnFrames):-1:1)
-%             mfRawTrace(:, nFrame, 1) = double(fsData(vnPixels, vnFrames(nFrame), nChannel));
-%          end
-%       else
-         mfRawTrace = double(fsData(vnPixels, vnFrames, nChannel));
-%       end
-      
-      % - Calculate deltaF/F
-      if (bUsedFF)
-         mfBlankTrace = double(fsData.BlankFrames(vnPixels, vnFrames));
-         mfRawTraceDFF = (mfRawTrace - mfBlankTrace) ./ mfBlankTrace;
-         mfRawTraceDFF(isnan(mfBlankTrace)) = mfRawTrace(isnan(mfBlankTrace));
-         mfRawTrace = mfRawTraceDFF;
+      if (~iscell(cvnPixels))
+         cvnPixels = {cvnPixels};
       end
       
-      vfRegionTrace = nanmean(mfRawTrace, 1);
-      fRegionResponse = nanmean(vfRegionTrace);
-      vfPixelResponse = nanmean(mfRawTrace, 2);
-      nFramesInSample = numel(vfRegionTrace);
+      nNumROIs = numel(cvnPixels);
+      
+      % - Convert logical indexing to numerical indexing
+      vbIsLogical = cellfun(@islogical, cvnPixels);
+      cvnPixels(vbIsLogical) = cellfun(@(c)(find(c)), cvnPixels(vbIsLogical), 'UniformOutput', false);
+      
+      if (islogical(vnFrames))
+         vnFrames = find(vnFrames);
+      end
+      
+      % - Concatenate pixels to extract
+      cvnPixels = cellfun(@(c)(reshape(c, 1, [])), cvnPixels, 'UniformOutput', false);
+      vnROISizes = cellfun(@numel, cvnPixels);
+      mnROIBoundaries = [0 cumsum(vnROISizes)];
+      mnROIBoundaries = [mnROIBoundaries(1:end-1)'+1 mnROIBoundaries(2:end)'];
+      vnExtractPixels = [cvnPixels{:}];
+      
+      % - Extract data from stack
+      mfRawTrace = double(fsData(vnExtractPixels, vnFrames, nChannel));
+      if (bUsedFF)
+         mfBlankTrace = double(fsData.BlankFrames(vnExtractPixels, vnFrames));
+      end
+      
+      % - Extract regions
+      for (nROI = nNumROIs:-1:1)
+         vnThesePixels = mnROIBoundaries(nROI, 1):mnROIBoundaries(nROI, 2);
+         vfThisRawTrace = nanmean(mfRawTrace(vnThesePixels, :), 1);
+         
+         % - Calculate deltaF/F
+         if (bUsedFF)
+            vfThisBlankTrace = nanmean(mfBlankTrace(vnThesePixels, :), 1);
+            vfThisRawTraceDFF = (vfThisRawTrace - vfThisBlankTrace) ./ vfThisBlankTrace;
+            vfThisRawTraceDFF(isnan(vfThisBlankTrace)) = vfThisRawTrace(isnan(vfThisBlankTrace));
+            vfThisRawTrace = vfThisRawTraceDFF;
+         end
+         
+         cmfRawTrace{nROI} = mfRawTrace(vnThesePixels, :);
+         
+         if (nargout > 1)
+            cvfRegionTrace{nROI} = vfThisRawTrace;
+         end
+         
+         if (nargout > 2)
+            cfRegionResponse{nROI} = nanmean(cvfRegionTrace{nROI});
+         end
+         
+         if (nargout > 3)
+            cnFramesInSample{nROI} = numel(vnFrames);
+         end
+         
+         if (nargout > 4)
+            cvfPixelResponse{nROI} = nanmean(cmfRawTrace{nROI}, 2);
+         end
+      end
+      
+      if (nNumROIs == 1)
+         cmfRawTrace = cmfRawTrace{1};
+         
+         if (nargout > 1)
+            cvfRegionTrace = cvfRegionTrace{1};
+         end
+         
+         if (nargout > 2)
+            cfRegionResponse = cfRegionResponse{1};
+         end
+         
+         if (nargout > 3)
+            cnFramesInSample = cnFramesInSample{1};
+         end
+         
+         if (nargout > 4)
+            cvfPixelResponse = cvfPixelResponse{1};
+         end
+      end
    end
 end
 

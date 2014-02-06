@@ -1,6 +1,6 @@
 function QuickAnalyseSparseRF(cstrFilenames, ...
    vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
-   tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
+   tPixelDuration, nBlankStimID, tBlankStimTime, ...
    bAlign, bAssignBlack, bAssignBlank, ...
    tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
    mfCustomAlignment, bOrderROIs, fhExtractionFunction)
@@ -11,10 +11,16 @@ function QuickAnalyseSparseRF(cstrFilenames, ...
 %
 % Usage: QuickAnalyseSparseRF(  cstrFilenames, ...
 %                               vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
-%                               tPixelDuration, tPixelBlankTime, tBlankStimTime, ...
+%                               tPixelDuration, nBlankStimID, tBlankStimTime, ...
 %                               bAlign, bAssignBlack, bAssignBlank, ...
 %                               tForceStackFrameDuration, cvnForceStackSequenceIDs, strImageJRoiSet, ...
 %                               mfCustomAlignment, bOrderROIs, fhExtractionFunctionFunction)
+%
+% 'mfCustomAlignment' can be a matrix, in which case it is used as an image
+% against which to measure misalignment.  It can be a scalar, in which case
+% is is used as a frame index to extract a reference image from the stack.
+% Or is can be a function handle @(oStack)Align(oStack, params), which
+% computes misalignment on a FocusStack with arbitrary parameters.
 
 % -- Defaults
 
@@ -23,6 +29,8 @@ DEF_bAssignBlack = false;
 DEF_bAssignBlank = false;
 DEF_mfCustomAlignment = 10;
 DEF_bOrderROIs = true;
+
+fUsePreStimBlankProportion = 0.5;
 
 %% -- Check arguments, assign defaules
 
@@ -70,7 +78,7 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
 
 %% -- Try to make a focus stack
 
-% try
+try
    % - Construct a stack
    disp('--- QuickAnalyseSparseRF: Creating FocusStack...');
    fsStack = FocusStack(cstrFilenames);
@@ -89,29 +97,39 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
       fsStack.cvnSequenceIDs = cvnForceStackSequenceIDs;
    end
    
-   % - Assign stimulus durations
-   vtStimDurations = repmat(tPixelBlankTime + tPixelDuration, prod(vnNumPixels), 1);
+   tPixelBlankTime = fsStack.tBlankTime;
    
-   if (~isempty(tBlankStimTime) && (tBlankStimTime ~= 0))
-      vtStimDurations = [tBlankStimTime; vtStimDurations];
+   % - Assign stimulus durations and "use data" times
+   nNumStimuli = prod(vnNumPixels) + ~isempty(nBlankStimID);
+   
+   vtStimulusDurations = repmat(tPixelDuration + tPixelBlankTime, nNumStimuli, 1);
+   mtStimulusUseTimes = repmat(tPixelBlankTime + [0 tPixelDuration], nNumStimuli, 1);
+   mtStimLabelTimes = repmat(tPixelBlankTime + [0 tPixelDuration], nNumStimuli, 1);
+   mtBlankTimes = repmat(tPixelBlankTime * [fUsePreStimBlankProportion 1], nNumStimuli, 1);
+   vnUseStimIDs = 1:nNumStimuli;
+   
+   if (~isempty(nBlankStimID))
+       vtStimulusDurations(nBlankStimID) = tBlankStimTime;
+       mtStimulusUseTimes(nBlankStimID, 1) = 0;
+       mtStimLabelTimes(nBlankStimID, :) = nan;
+       mtBlankTimes(nBlankStimID, :) = tBlankStimTime * [fUsePreStimBlankProportion 1];
+       vnUseStimIDs = vnUseStimIDs(vnUseStimIDs ~= nBlankStimID);
    end
    
-   fsStack.vtStimulusDurations = vtStimDurations;
-   
-   % - Assign stimulus use times
-   mtStimUseTimes = repmat([tPixelBlankTime tPixelBlankTime+tPixelDuration], prod(vnNumPixels), 1);
-   
-   if (~isempty(tBlankStimTime) && (tBlankStimTime ~= 0))
-      mtStimUseTimes = [[0 tBlankStimTime]; mtStimUseTimes];
-   end
-   
-   fsStack.mtStimulusUseTimes = mtStimUseTimes;
+   fsStack.vtStimulusDurations = vtStimulusDurations;
+   fsStack.mtStimulusUseTimes = mtStimulusUseTimes;
    
    % -- Align stack, if requested
    if (bAlign)
       disp('--- QuickAnalyseSparseRF: Aligning...');
-      nAlignChannel = size(fsStack, 4);
-      fsStack.Align(nAlignChannel, false, 10, mfCustomAlignment);
+      
+      if (isa(mfCustomAlignment, 'function_handle'))
+         fsStack.mfFrameShifts = mfCustomAlignment(fsStack);
+      else
+          
+         nAlignChannel = size(fsStack, 4);
+         fsStack.Align(nAlignChannel, false, 1, mfCustomAlignment);
+      end
    end
    
    % -- Assign black, if requested
@@ -123,23 +141,24 @@ strTempFilename = fullfile(tempdir, sprintf('QASRF_analysis_%u.mat', HashStructu
    % -- Assign blank frames, if requested
    if (bAssignBlank)
       disp('--- QuickAnalyseSparseRF: Assigning blank frames...');
-      AssignBlank(fsStack, fhExtractionFunction);
+      AssignBlank(fsStack, fhExtractionFunction, mtBlankTimes, nBlankStimID);
    end
    
-% catch meErr
-%    - Try to save the stack, if possible
-%    if (exist('fsStack', 'var'))
-%       save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
-%    end
-%    
-%    rethrow(meErr);
-% end
+catch meErr
+   % - Try to save the stack, if possible
+   if (exist('fsStack', 'var'))
+      save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
+      fprintf('*** QuickAnalyseSparseRF: Saved stack to [%s]\n', strTempFilename);
+   end
+   
+   rethrow(meErr);
+end
 
 % fsStack.fPixelsPerUM = 2*fsStack.fPixelsPerUM;
-% fsStack.fPixelsPerUM = 5;
+% fsStack.fPixelsPerUM = 5
 
 % - Save stack
-save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'tBlankStimTime');
+save(strTempFilename, 'fsStack', 'vnNumPixels', 'fPixelOverlap', 'fPixelSizeDeg', 'vfScreenSizeDeg', 'nBlankStimID', 'tBlankStimTime');
 
 
 %% -- Define ROIs
@@ -162,6 +181,12 @@ sRegionsPlusNP = sRegions;
 % sRegionsPlusNP.NumObjects = sRegionsPlusNP.NumObjects+1;
 % sRegionsPlusNP.PixelIdxList = [{1:nNumPixels} sRegionsPlusNP.PixelIdxList];
 
+% - Mask off mis-aligned regions
+mbAlignedMask = fsStack.GetAlignedMask;
+for (nRegion = 1:sRegionsPlusNP.NumObjects)
+   sRegionsPlusNP.PixelIdxList{nRegion} = sRegionsPlusNP.PixelIdxList{nRegion}(mbAlignedMask(sRegionsPlusNP.PixelIdxList{nRegion}));
+end
+
 % - Save ROIs
 save(strTempFilename, 'sRegions', '-append');
 
@@ -172,12 +197,11 @@ save(strTempFilename, 'sRegions', '-append');
 disp('--- QuickAnalyseSparseRF: Extracting responses...');
 
 [vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, tfTrialResponses, tnTrialSampleSizes] = ...
-   ExtractRegionResponses(fsStack, sRegionsPlusNP, 1, fhExtractionFunction(bAssignBlank));
+   ExtractRegionResponses(fsStack, sRegionsPlusNP, nBlankStimID, fhExtractionFunction(bAssignBlank));
 
 if (bAssignBlank)
    disp('--- QuickAnalyseSparseRF: Measuring responsiveness...');
    % - Compute Z-score against blank STDs
-   nNumStimuli = numel(fsStack.vtStimulusDurations);
    mnStimSampleSizes = sum(tnTrialSampleSizes, 3);
    mfBlankStdsCorr = repmat(vfBlankStds', 1, nNumStimuli) ./ sqrt(mnStimSampleSizes);
    mfStimZScores = mfStimMeanResponses ./ mfBlankStdsCorr;
@@ -223,7 +247,7 @@ save(strTempFilename, 'vfBlankStds', 'mfStimMeanResponses', 'mfStimStds', ...
 
 RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg, ...
       vfBlankStds, mfStimMeanResponses, mfStimStds, mfRegionTraces, ...
-      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, tBlankStimTime, ...
+      tfTrialResponses, tnTrialSampleSizes, sRegionsPlusNP, nBlankStimID, tBlankStimTime, ...
       mfStimZScores, tfBlankStdsCorr, tfStimZScoresTrials);
 
 
@@ -234,7 +258,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
 %
 % Usage: AssignBlank(fsStack, fhExtractionFunction)
 
-   function AssignBlank(fsStack, fhExtractionFunction)
+   function AssignBlank(fsStack, fhExtractionFunction, mtBlankTimes, nBlankStimID)
       
       mbAlignMask = fsStack.GetAlignedMask; %#ok<NASGU>
       
@@ -242,7 +266,7 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          vnBlockIndex, vnFrameInBlock, vtTimeInBlock, ...
          vnStimulusSeqID, vtTimeInStimPresentation, ...
          nul, vbUseFrame] = ...
-         FrameStimulusInfo(fsStack, 1:size(fsStack, 3));
+         FrameStimulusInfo(fsStack, 1:size(fsStack, 3)); %#ok<SETNU>
       
       % - Turn off blank warning and unaligned warning
       wOld = warning('off', 'FocusStack:FilteringBlankFrames');
@@ -253,13 +277,22 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
       fsStack.BlankNormalisation('none');
       fhEF = fhExtractionFunction(false);
       
+      vnStimSet = unique(vnStimulusSeqID);
+      vnStimSet = vnStimSet(~isnan(vnStimSet));
+      vnStimSet = setdiff(vnStimSet, nBlankStimID);
+      
+      nProgress = 0;
+      nProgressMax = numel(fsStack.cstrFilenames) * numel(vnStimSet);
+      
+      fprintf(1, 'Assigning blank: %6.2f%%', 0);
+      
       for (nBlock = 1:numel(fsStack.cstrFilenames)) %#ok<FORPF>
          % - Get the median blank frame for this block
          vbBlockFrames = vnBlockIndex == nBlock;
-         vbBlockBlankStimFrames = vbBlockFrames & (vnStimulusSeqID == 1);
+         vbBlockBlankStimFrames = vbBlockFrames & (vnStimulusSeqID == nBlankStimID);
          vbBlockBlankFrames = vbBlockBlankStimFrames & vbUseFrame;
          
-         tfBlankFrames = reshape(fhEF(fsStack, :, vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
+         tfBlankFrames = reshape(fhEF(fsStack, 1:prod(size(fsStack, 1:2)), vbBlockBlankFrames), size(fsStack, 1), size(fsStack, 2), []); %#ok<PSIZE>
          mfThisBlankAvg = nanmean(tfBlankFrames, 3);
          
          % - Filter zeros, replace with NaN
@@ -272,23 +305,23 @@ RF_explorer(fsStack, vnNumPixels, fPixelOverlap, fPixelSizeDeg, vfScreenSizeDeg,
          fsStack.AssignBlankFrame(cat(3, mfThisBlankAvg, mfThisBlankStd), vbBlockFrames);
          
          % - Assign separate blank frames for each other stimulus segment
-         vnStimSet = unique(vnStimulusSeqID);
-         vnStimSet = vnStimSet(~isnan(vnStimSet));
-         vnStimSet = setdiff(vnStimSet, 1);
          for (nStimSeqID = vnStimSet)
             % - Find all frames for this presentation
             vbPresFrames = vbBlockFrames & (vnStimulusSeqID == nStimSeqID);
             
             % - Find blank frames for this presentation (start and end of blank time)
             vbPresBlankFrames =  vbPresFrames & ...
-               (vtTimeInStimPresentation >= 0) & ...
-               (vtTimeInStimPresentation <= tPixelBlankTime);
+               (vtTimeInStimPresentation >= mtBlankTimes(nStimSeqID, 1)) & ...
+               (vtTimeInStimPresentation <= mtBlankTimes(nStimSeqID, 2));
             
             % - Extract these blank frames
-            tfPresBlank = reshape(fhEF(fsStack, :, vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []);
+            tfPresBlank = reshape(fhEF(fsStack, 1:prod(size(fsStack, 1:2)), vbPresBlankFrames), size(fsStack, 1), size(fsStack, 2), []); %#ok<PSIZE>
             
             % - Assign the mean; Std.Dev is taken from block blank
             fsStack.AssignBlankFrame(cat(3, nanmean(tfPresBlank, 3), mfThisBlankStd), vbPresFrames);
+            
+            nProgress = nProgress + 1;
+            fprintf(1, '\b\b\b\b\b\b\b%6.2f%%', nProgress / nProgressMax * 100);
          end
       end
       
