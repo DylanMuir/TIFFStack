@@ -74,7 +74,7 @@ if (isa(fsStack, 'FocusStack'))
 end
 
 % - Do we need to obtain a stack average?
-if (~exist('mfAverage', 'var') || isempty('mfAverage'))
+if (~exist('mfAverage', 'var') || isempty(mfAverage))
    disp('--- FalseColourMovie: Extracting average response...');
    mfAverage = fsStack.SummedAlignedFrames(:, :, :, nChannel);
 end
