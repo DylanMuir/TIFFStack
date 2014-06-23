@@ -113,8 +113,8 @@ end
 bIsHold = ishold;
 hold on;
 hBar = plot([fStartX fEndX], [fStartY fEndY], PlotOptions{:});
-text(mean([fStartX fEndX]), fTextY, sprintf('%d um', round(fLengthMM * 1e3)), ...
-   'FontSize', 18, 'HorizontalAlignment', 'center', 'Color', get(hBar, 'Color'));
+% text(mean([fStartX fEndX]), fTextY, sprintf('%d um', round(fLengthMM * 1e3)), ...
+%    'FontSize', 18, 'HorizontalAlignment', 'center', 'Color', get(hBar, 'Color'));
 
 % - Restore hold value
 if (~bIsHold)
