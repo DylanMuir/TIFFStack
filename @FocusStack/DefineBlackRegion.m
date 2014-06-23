@@ -2,7 +2,24 @@ function [vfBlackTrace] = DefineBlackRegion(oStack, vnBlackPixels, nChannel)
 
 % DefineBlackRegion - METHOD Define a region of the stack to be "black" for each frame
 %
-% Subsequent frame extractions will subtract the black value for that frame
+% Usage: [vfBlackTrace] = DefineBlackRegion(oStack <, vnBlackPixels, nChannel>)
+%
+% DefineBlackRegion allows the user to set a region of pixels on the
+% (aligned) stack that will be used as a black reference. For example,
+% several pixels inside a blood vessel could be selected. Subsequent frame
+% extractions will subtract the black value for that frame.
+%
+% If 'vnBlackPixels' is provided, the provided pixel indices will be used,
+% a black trace extracted for those pixels, and the black trace assigned to
+% the stack. If 'vnBlackPixels' is not provided, a figure will be displayed
+% allowing the user to select a circular region to use to define the black
+% trace.
+%
+% The optional argument 'nChannel' allows a specific imaging channel to be
+% used to define the black trace for the stack. Default: 1.
+
+% Author: Dylan Muir <muir@hifo.uzh.ch>
+% Created: 2010
 
 if (~exist('nChannel', 'var') || isempty(nChannel))
    nChannel = 1;
