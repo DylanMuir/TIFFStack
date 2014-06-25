@@ -18,5 +18,6 @@ This is the source repository for FocusStack, a Matlab toolbox for analysis of t
 
 ### Who do I talk to? ###
 
-* In general the toolbox is supplied "as-is", with only moderate support.
+* In general the toolbox is supplied "as-is", with only moderate support
+* Please use the [Issues tracker](https://bitbucket.org/DylanMuir/twophotonanalysis/issues) to report bugs and feature suggestions
 * For questions or feedback, contact Dylan Muir (<dylan.muir@unibas.ch>)
