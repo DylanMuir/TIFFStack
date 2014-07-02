@@ -116,6 +116,7 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 % Author: Dylan Muir <muir@hifo.uzh.ch>
 % Created: 9th August, 2011
 %
+% 20140602 Bug report contributed by Samuel Barnes and Yousef Mazaheri
 % 20110810 Bug report contributed by Jean-Yves Tinevez
 % 20110829 Bug fix contributed by Benjamin Ricca <ricca@berkeley.edu>
 % 20120622 Order of ROIs in a ROI set is now preserved
@@ -162,7 +163,7 @@ end
 
 % -- Check for a zip file
 
-[nul, nul, strExt] = fileparts(strFilename);
+[nul, nul, strExt] = fileparts(strFilename); %#ok<ASGLU>
 if (isequal(lower(strExt), '.zip'))
    % - get zp file contents
    cstrFilenames_short = listzipcontents_rois(strFilename);
@@ -207,7 +208,7 @@ if (~isequal(strMagic, 'Iout'))
 end
 
 % -- Set ROI name
-[nul, sROI.strName] = fileparts(strFilename);
+[nul, sROI.strName] = fileparts(strFilename); %#ok<ASGLU>
 
 % -- Read version
 sROI.nVersion = fread(fidROI, 1, 'int16');
@@ -220,20 +221,20 @@ fseek(fidROI, 1, 'cof'); % Skip a byte
 sROI.vnRectBounds = fread(fidROI, [1 4], 'int16');
 
 % -- Read number of coordinates
-nNumCoords = fread(fidROI, 1, 'int16');
+nNumCoords = fread(fidROI, 1, 'uint16');
 
 % -- Read the rest of the header
 vfLinePoints = fread(fidROI, 4, 'float32');
 nStrokeWidth = fread(fidROI, 1, 'int16');
-nShapeROISize = fread(fidROI, 1, 'int32');
-nStrokeColor = fread(fidROI, 1, 'int32');
-nFillColor = fread(fidROI, 1, 'int32');
+nShapeROISize = fread(fidROI, 1, 'uint32');
+nStrokeColor = fread(fidROI, 1, 'uint32');
+nFillColor = fread(fidROI, 1, 'uint32');
 nROISubtype = fread(fidROI, 1, 'int16');
 nOptions = fread(fidROI, 1, 'int16');
-nArrowStyle = fread(fidROI, 1, 'int16');
+nArrowStyle = fread(fidROI, 1, 'uint8');
 nArrowHeadSize = fread(fidROI, 1, 'uint8');
 nRoundedRectArcSize = fread(fidROI, 1, 'int16');
-nPosition = fread(fidROI, 1, 'int16'); %#ok<NASGU>
+sROI.nPosition = fread(fidROI, 1, 'uint32');
 
 % - Seek to get aspect ratio
 fseek(fidROI, 52, 'bof');
@@ -349,16 +350,16 @@ if (sROI.nVersion >= 218)
       % - Seek to after header
       fseek(fidROI, 64, 'bof');
       
-      sROI.nFontSize = fread(fidROI, 1, 'int32');
-      sROI.nFontStyle = fread(fidROI, 1, 'int32');
-      nNameLength = fread(fidROI, 1, 'int32');
-      nTextLength = fread(fidROI, 1, 'int32');
+      sROI.nFontSize = fread(fidROI, 1, 'uint32');
+      sROI.nFontStyle = fread(fidROI, 1, 'uint32');
+      nNameLength = fread(fidROI, 1, 'uint32');
+      nTextLength = fread(fidROI, 1, 'uint32');
       
       % - Read font name
-      sROI.strFontName = fread(fidROI, nNameLength, 'int16=>char');
+      sROI.strFontName = fread(fidROI, nNameLength, 'uint16=>char');
       
       % - Read text
-      sROI.strText = fread(fidROI, nTextLength, 'int16=>char');
+      sROI.strText = fread(fidROI, nTextLength, 'uint16=>char');
    end
 end
 
