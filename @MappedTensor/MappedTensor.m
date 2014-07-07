@@ -1587,7 +1587,7 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
       case 'open'
          if (nargin == 2)
             [varargout{1}] = fopen(varargin{1}, 'r+');
-            [nul, nul, varargout{2}] = fopen(varargout{1});
+            [nul, nul, varargout{2}, nul] = fopen(varargout{1});
          else
             varargout{1} = fopen(varargin{1}, 'r+', varargin{2});
          end

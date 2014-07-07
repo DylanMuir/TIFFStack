@@ -6,17 +6,17 @@
  * Created: 6th July, 2012
  */
 
-// -- Includes
+/* -- Includes */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>e
+#include <string.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <errno.h>
 
 
-// -- MEX definitions
+/* -- MEX definitions */
 
 #ifdef   DEBUG
    #define  dprintf(...)  printf(__VA_ARGS__)
@@ -35,6 +35,10 @@
 #endif
 
 #ifdef MATLAB_MEX_FILE
+	/* - Fix char16_t definition bug in OS X 10.9 */
+	#ifndef char16_t
+		typedef uint16_t char16_t;
+	#endif
    #include "mex.h"
    #include "io64.h"
    #define	malloc         mxMalloc
@@ -47,12 +51,12 @@
 #endif
 
         
-// -- Case-insensitive string comparison
+/* -- Case-insensitive string comparison */
 
 #ifndef  strncasecmp
 	#define  strncasecmp  cmpstrni
  
-   // cmpstrni - FUNCTION Case-insensitive string comparison
+   /* cmpstrni - FUNCTION Case-insensitive string comparison */
    int cmpstrni(const char *s1, const char *s2, size_t length) {
       int   index;
    
@@ -64,7 +68,7 @@
 #endif
         
 
-// -- Command definitions
+/* -- Command definitions */
         
 #define  CMD_OPEN_FILE     "open"
 #define  CMD_CLOSE_FILE    "close"
@@ -72,14 +76,14 @@
 #define  CMD_WRITE_CHUNKS  "write_chunks"
         
 
-// -- Helper function definitions
+/* -- Helper function definitions */
         
 void DisplayHelp();
 char *ReadStringArg(const mxArray *pmxaArg);
 mxClassID ClassIDForClassName(const char *strClassName, size_t nLength);
 
 
-// -- Command function definitions
+/* -- Command function definitions */
 
 void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 void CmdCloseFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
@@ -87,9 +91,9 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]);
 
 
-// -- Endian-management functions
+/* -- Endian-management functions */
 
-// - Function definitions
+/* - Function definitions */
 void buf_betoh16(uint16_t *vnData, uint64_t uNumEntries);
 void buf_betoh32(uint32_t *vnData, uint64_t uNumEntries);
 void buf_betoh64(uint64_t *vnData, uint64_t uNumEntries);
@@ -105,21 +109,21 @@ void buf_htole64(uint64_t *vnData, uint64_t uNumEntries);
 
 void *GetEndianSwapper(size_t nDataElemSize, bool bBigEndian);
 
-// - Endian test
+/* - Endian test */
 const int16_t i = 1;
 #define is_bigendian() ( (*(int8_t *)&i) == 0 )
 
 
-// -- MEX file entry function
+/* -- MEX file entry function */
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-   // -- Local variables
+   /* -- Local variables */
    mwSize   nLength;
    char     *strCommand;
    
    
-   // -- Check arguments
+   /* -- Check arguments */
    if (nrhs < 1) {
       DisplayHelp();
       mexErrMsgIdAndTxt("MappedTensor:mapped_tensor_shim:usage",
@@ -127,9 +131,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    }
    
    
-   // -- Parse command string
+   /* -- Parse command string */
 
-   // - Read command string
+   /* - Read command string */
    strCommand = ReadStringArg(prhs[0]);
 
    dprintf("mts: Called with command [%s]\n", strCommand);
@@ -154,22 +158,22 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                 "Invalid command supplied: [%s].\n", strCommand);
    }
    
-   // -- Free command string
+   /* -- Free command string */
    free(strCommand);
 }
  
 
-// -- Command functions
+/* -- Command functions */
 
 // Usage: [hFileHandle, strDefaultMachineFormat] = mapped_tensor_shim('open', strFilename);
 void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-   // -- Local variables
+   /* -- Local variables */
    char     *strFilename;
    FILE     *hFile;
    uint8_t  *uReturnFileHandle;
    
-   // -- Check arguments
+   /* -- Check arguments */
    
    if (nrhs < 2) {
       errprintf("MappedTensor:mapped_tensor_shim:InvalidArgument",
@@ -181,12 +185,12 @@ void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                 "'strFilename' must be a character array.", "");
    }
    
-   // - Get filename argument
+   /* - Get filename argument */
    strFilename = ReadStringArg(prhs[1]);
    
    dprintf("mts/cof: Opening file [%s]\n", strFilename);
    
-   // - Try to open file for reading
+   /* - Try to open file for reading */
    if ((hFile = fopen(strFilename, "r+" FILE_FORCE_BINARY)) == NULL) {
       errprintf("MappedTensor:mapped_tensor_shim:CouldNotOpenFile",
                 "Could not open the requested file.",
@@ -195,7 +199,7 @@ void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    }
    
    
-   // -- Create the return file handle
+   /* -- Create the return file handle */
    
    plhs[0] = mxCreateNumericMatrix(1, sizeof(FILE *), mxUINT8_CLASS, 0);
    uReturnFileHandle = (uint8_t *) mxGetData(plhs[0]);
@@ -204,7 +208,7 @@ void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    dprintf("mts/cof: File handle [%p], [%d] bytes\n", hFile, sizeof(FILE *));
    
 	
-	// -- Create the return default machine format string
+	/* -- Create the return default machine format string */
 	
 	if (is_bigendian()) {
       const char  *strMachineFormat = "ieee-be";
@@ -217,17 +221,17 @@ void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	
 	
-   // - Free allocated filename string
+   /* - Free allocated filename string */
    free(strFilename);
 }
 
-// Usage: mapped_tensor_shim('close', hFileHandle);
+/* Usage: mapped_tensor_shim('close', hFileHandle); */
 void CmdCloseFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-   // -- Local variables
+   /* -- Local variables */
    FILE     *hFile;
    
-   // -- Check arguments
+   /* -- Check arguments */
    
    dprintf("mts/ccf: Closing file\n");
 
@@ -237,12 +241,12 @@ void CmdCloseFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    }
    
    if ((mxGetN(prhs[1]) * mxGetN(prhs[1])) > 0) {			
-		// - Read the file handle
+		/* - Read the file handle */
 		memcpy(&hFile, mxGetData(prhs[1]), sizeof(FILE *));
 		
 		dprintf("mts/ccf: File handle [%p]\n", hFile);   
 		
-		// - Close the file
+		/* - Close the file */
 		if (fclose(hFile) == EOF) {
 			errprintf("MappedTensor:mapped_tensor_shim:CouldNotCloseFile",
 						 "Could not close the requested file.",
@@ -252,10 +256,10 @@ void CmdCloseFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 }
 
-// Usage: [tfData] = mapped_tensor_shim('read_chunks', hFileHandle, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, bBigEndian);
+/* Usage: [tfData] = mapped_tensor_shim('read_chunks', hFileHandle, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, bBigEndian); */
 void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-   // -- Local variables
+   /* -- Local variables */
    FILE        *hFile;
    mwSize      nNumChunks, nOffset, nNumDims, *vnDataSize, nDataElemSize, nNumUniqueElems;
    double      *mfFileChunkIndices, *vfUniqueIndices, *vfReverseSort, *vfDataSize;
@@ -275,27 +279,27 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
    dprintf("mts/crc: Reading chunks\n");   
    
-   // -- Check arguments
+   /* -- Check arguments */
    if (nrhs < 9) {
       errprintf("MappedTensor:mapped_tensor_shim:InvalidArgument",
                 "Not enough arguments for command 'read_chunks'", "");
    }
    
-   // - Read the file handle
+   /* - Read the file handle */
 	memcpy(&hFile, mxGetData(prhs[1]), sizeof(FILE *));
    
-   // - Get the chunk indices
+   /* - Get the chunk indices */
    nNumChunks = mxGetM(prhs[2]);
    mfFileChunkIndices = (void *) mxGetPr(prhs[2]);
    
-	// - Get the unique data indices
+	/* - Get the unique data indices */
    vfUniqueIndices = mxGetPr(prhs[3]);
    nNumUniqueElems = mxGetN(prhs[3]) * mxGetM(prhs[3]);
    
-   // - Get the reverse sort indices
+   /* - Get the reverse sort indices */
    vfReverseSort = mxGetPr(prhs[4]);
 
-	// - Get the output data size
+	/* - Get the output data size */
    vfDataSize = mxGetPr(prhs[5]);
    nNumDims = mxGetM(prhs[5]) * mxGetN(prhs[5]);
    vnDataSize = malloc(nNumDims * sizeof(mwSize));
@@ -305,14 +309,14 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       uNumDataElems *= vnDataSize[nOffset];
    }
    
-   // - Get the data class
+   /* - Get the data class */
    strClass = ReadStringArg(prhs[6]);
    mxcDataClass = ClassIDForClassName(strClass, mxGetN(prhs[6]));
    
-   // - Get the number of header bytes
+   /* - Get the number of header bytes */
    uHeaderBytes = (uint64_t) *mxGetPr(prhs[7]);
    
-   // -- Allocate output variable and data cache
+   /* -- Allocate output variable and data cache */
    
    if (mxcDataClass == mxLOGICAL_CLASS) {
       plhs[0] = mxCreateLogicalArray(nNumDims, vnDataSize);
@@ -329,12 +333,12 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 					 "Could not allocate data buffer.", "");
 	}
    
-	// - Get the endian-ness information and an endian-swapping function
+	/* - Get the endian-ness information and an endian-swapping function */
 	bBigEndian = (bool) *mxGetPr(prhs[8]);
 	pfEndianSwap = GetEndianSwapper(nDataElemSize, bBigEndian);
 	
 	
-	// -- Debug info
+	/* -- Debug info */
 #ifdef   DEBUG
    dprintf("mts/crc: File handle: [%p]\n", hFile);
 	
@@ -393,7 +397,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 #endif
    
    
-   // -- Loop over chunks
+   /* -- Loop over chunks */
    
    uUniqueDataPtr = uUniqueData;
    
@@ -401,7 +405,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
       dprintf("mts/crc: ------- Reading chunk.  UDP is [%p] (offset %ld)\n", uUniqueDataPtr, uUniqueDataPtr - uUniqueData);
       
-      // -- Get chunk info
+      /* -- Get chunk info */
 		vnSubs[0] = nChunkIndex; vnSubs[1] = 0;
 		uChunkStart = (uint64_t) (mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] - 1) * nDataElemSize + uHeaderBytes;
 		
@@ -414,14 +418,14 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		
 		dprintf("mts/crc: Seeking to [%ld]\n", uChunkStart);
 		
-      // - Seek to the beginning of this chunk
+      /* - Seek to the beginning of this chunk */
       setFilePos(hFile, (fpos_T *) &uChunkStart);
 
-      // - Read the data for this chunk
+      /* - Read the data for this chunk */
       if (uChunkSkip == 1) {
 			dprintf("mts/crc: Single-read chunk, [%ld] bytes\n", uChunkSize * nDataElemSize);
 			
-         // - Read the data using a single read
+         /* - Read the data using a single read */
          if ((nRead = fread((void *) uUniqueDataPtr, nDataElemSize, uChunkSize, hFile)) != uChunkSize) {
             dprintf("Read %d\n", nRead);
             if (ferror(hFile)) {
@@ -442,7 +446,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             }
          }
       
-         // - Increment data pointer
+         /* - Increment data pointer */
          uUniqueDataPtr += nDataElemSize * uChunkSize;
          
       } else if (uChunkSkip < 5) {
@@ -458,7 +462,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                     nRead, nDataElemSize * uChunkSkip * uChunkSize,
                     nDataElemSize * uChunkSkip * (uChunkSize-1) + nDataElemSize);
             
-            // - We might get a short read if we're at the end of the file
+            /* - We might get a short read if we're at the end of the file */
             if (nRead < nDataElemSize * uChunkSkip * (uChunkSize-1) + nDataElemSize) {  
                if (ferror(hFile)) {
                   errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
@@ -479,15 +483,15 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             }
          }
          
-         // - Copy into unique data buffer
+         /* - Copy into unique data buffer */
          for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {
             memcpy((void *) (uUniqueDataPtr + (uElementIndex * nDataElemSize)), vuConsolidatedData + (uElementIndex * nDataElemSize * uChunkSkip), nDataElemSize);
          }
          
-         // - Free buffer
+         /* - Free buffer */
          free(vuConsolidatedData);
          
-         // - Increment data pointer
+         /* - Increment data pointer */
          uUniqueDataPtr = uUniqueDataPtr + uChunkSize * nDataElemSize * (uChunkSkip-1);
          
          
@@ -495,9 +499,9 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
 			dprintf("mts/crc: Single-element skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
 			
-         // - Read an element, then skip elements
+         /* - Read an element, then skip elements */
          for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {
-            // - Read an element
+            /* - Read an element */
             if (fread((void *) uUniqueDataPtr, nDataElemSize, 1, hFile) != 1) {
                if (ferror(hFile)) {
                   errprintf("MappedTensor:mapped_tensor_shim:FileReadError",
@@ -517,29 +521,29 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                }
             }
             
-            // - Skip the required number of elements
+            /* - Skip the required number of elements */
             if (uElementIndex < (uChunkSize-1)) {
                dprintf("mts/crc: Skipping [%ld] bytes\n", (uChunkSkip-1) * nDataElemSize);
                fseek(hFile, (uChunkSkip-1) * nDataElemSize, SEEK_CUR);
             }
             
-            // - Move to the next buffer element
+            /* - Move to the next buffer element */
             uUniqueDataPtr += nDataElemSize;
          }
       }
    }
    
-   // - Assign unique data to target data, in original indexing order
+   /* - Assign unique data to target data, in original indexing order */
    for (uElementIndex = 0; uElementIndex < uNumDataElems; uElementIndex++) {
       memcpy(tuTargetData + (uElementIndex * nDataElemSize), uUniqueData + ((uint64_t)(vfReverseSort[uElementIndex] - 1) * nDataElemSize), nDataElemSize);
    }
    
-	// - Perform endian swap, if necessary
+	/* - Perform endian swap, if necessary */
 	if (pfEndianSwap != NULL) {
 		pfEndianSwap(tuTargetData, uNumDataElems);
 	}
 	
-   // - Free temporary storage
+   /* - Free temporary storage */
    free(vnDataSize);
    free(uUniqueData);
 }
@@ -579,10 +583,10 @@ end
 
 */
 
-// Usage: mapped_tensor_shim('write_chunks', hFileHandle, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData, bBigEndian);
+/* Usage: mapped_tensor_shim('write_chunks', hFileHandle, cvnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData, bBigEndian); */
 void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-   // -- Local variables
+   /* -- Local variables */
    FILE        *hFile;
    mwSize      nNumChunks, nOffset, nNumDims, *vnDataSize, nDataElemSize, nNumUniqueElems;
    double      *mfFileChunkIndices, *vfUniqueIndices, *vfDataSize;
@@ -598,24 +602,24 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
    dprintf("mts/cwc: Writing chunks\n");   
    
-   // -- Check arguments
+   /* -- Check arguments */
    if (nrhs < 9) {
       errprintf("MappedTensor:mapped_tensor_shim:InvalidArgument",
                 "Not enough arguments for command 'write_chunks'", "");
    }
    
-   // - Read the file handle
+   /* - Read the file handle */
 	memcpy(&hFile, mxGetData(prhs[1]), sizeof(FILE *));
    
-   // - Get the chunk indices
+   /* - Get the chunk indices */
    nNumChunks = mxGetM(prhs[2]);
    mfFileChunkIndices = mxGetPr(prhs[2]);
    
-   // - Get the unique data indices
+   /* - Get the unique data indices */
    vfUniqueIndices = mxGetPr(prhs[3]);
    nNumUniqueElems = mxGetN(prhs[3]) * mxGetM(prhs[3]);
    
-   // - Get the referenced data size
+   /* - Get the referenced data size */
    vfDataSize = mxGetPr(prhs[4]);
    nNumDims = mxGetM(prhs[4]) * mxGetN(prhs[4]);
    vnDataSize = malloc(nNumDims * sizeof(mwSize));
@@ -625,14 +629,14 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       uNumRefElems *= vnDataSize[nOffset];
    }
    
-   // - Get the data class
+   /* - Get the data class */
    strClass = ReadStringArg(prhs[5]);
    mxcDataClass = ClassIDForClassName(strClass, mxGetN(prhs[5]));
    
-   // - Get the number of header bytes
+   /* - Get the number of header bytes */
    uHeaderBytes = (uint64_t) *mxGetPr(prhs[6]);
    
-   // - Get the data to be written and element size
+   /* - Get the data to be written and element size */
    uSourceData = (uint8_t *) mxGetPr(prhs[7]);
    uNumDataElems = mxGetM(prhs[7]) * mxGetN(prhs[7]);
    bScalarData = uNumDataElems == 1;
@@ -646,12 +650,12 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       mxDestroyArray(mxaTest);
    }
    
-	// - Get the endian-ness information and an endian-swapping function
+	/* - Get the endian-ness information and an endian-swapping function */
 	bBigEndian = (bool) *mxGetPr(prhs[8]);
 	pfEndianSwap = GetEndianSwapper(nDataElemSize, bBigEndian);
 
 	
-	// -- Debug info
+	/* -- Debug info */
 #ifdef   DEBUG
    dprintf("mts/cwc: File handle: [%p]\n", hFile);
 	
@@ -705,17 +709,17 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    }
 #endif
 	
-   // - Check data and reference sizes
+   /* - Check data and reference sizes */
    if (!bScalarData && (uNumDataElems != uNumRefElems)) {
       errprintf("MappedTensor:index_assign_element_count_mismatch",
                 "In an assignment A(I) = B, the number of elements in B and I must be the same.", "");
    }
 	
-	// -- Get max chunk size, and allocate data buffer
+	/* -- Get max chunk size, and allocate data buffer */
 	
 	uMaxChunkSize = 0;
    for (uChunkIndex = 0; uChunkIndex < nNumChunks; uChunkIndex++) {
-      // -- Get chunk size
+      /* -- Get chunk size */
 		vnSubs[0] = uChunkIndex;
 		vnSubs[1] = 2;
       if (mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] > uMaxChunkSize)
@@ -730,7 +734,7 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	dprintf("mts/cwc: Allocated chunk data write buffer: [%d] elements, [%d] bytes per elelemt\n", uMaxChunkSize, nDataElemSize);	
 	
 	
-	// -- If scalar data, fill data write buffer with replicated copies of scalar data
+	/* -- If scalar data, fill data write buffer with replicated copies of scalar data */
 	
 	if (bScalarData) {
 		dprintf("mts/cwc: Replicating scalar data to write buffer.\n");
@@ -740,11 +744,11 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	
 	
-   // -- Write data
+   /* -- Write data */
 	
 	uUniqueElemIndex = 0;
    for (uChunkIndex = 0; uChunkIndex < nNumChunks; uChunkIndex++) {
-      // -- Get chunk info		
+      /* -- Get chunk info */
 		vnSubs[0] = uChunkIndex; vnSubs[1] = 0;
 		uChunkStart = (uint64_t) (mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)] - 1) * nDataElemSize + uHeaderBytes;
 		
@@ -754,26 +758,26 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		vnSubs[1] = 2;
 		uChunkSize  = (uint64_t) mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)];
       
-      // - Seek to the beginning of this chunk
+      /* - Seek to the beginning of this chunk */
       setFilePos(hFile, (fpos_T *) &uChunkStart);
       
       dprintf("mts/cwc: Seeking to [%ld] bytes\n", uChunkStart);
 		
-		// - Gather data for this chunk
+		/* - Gather data for this chunk */
 		if (!bScalarData) {
 			for (uChunkElemIndex = 0; uChunkElemIndex < uChunkSize; uChunkElemIndex++, uUniqueElemIndex++) {
 				memcpy((void *) (tuTargetData + uChunkElemIndex * nDataElemSize), (void *) (uSourceData + (((uint64_t) (vfUniqueIndices[uUniqueElemIndex]-1)) * nDataElemSize)), nDataElemSize);
 			}
 		}
       
-		// - Perform endian swap, if necessary
+		/* - Perform endian swap, if necessary */
 		if (pfEndianSwap != NULL) {
 			pfEndianSwap(tuTargetData, uChunkSize);
 		}
 		
-      // - Write data for this chunk
+      /* - Write data for this chunk */
       if (uChunkSkip == 1) {
-         // - Write the data using a single write
+         /* - Write the data using a single write */
 			dprintf("mts/cwc: Single-write chunk [%ld] bytes\n", uChunkSize * nDataElemSize);
 			
          if (fwrite((void *) tuTargetData, nDataElemSize, uChunkSize, hFile) != uChunkSize) {
@@ -791,11 +795,11 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 			
       } else {
 			
-         // - Write an element, then skip elements
+         /* - Write an element, then skip elements */
 			dprintf("mts/cwc: Skip-write chunk: [%ld] bytes per element\n", nDataElemSize);
 			
          for (uChunkElemIndex = 0; uChunkElemIndex < uChunkSize; uChunkElemIndex++) {
-            // - Write an element
+            /* - Write an element */
             if (fwrite((void *) (tuTargetData + (uChunkElemIndex * nDataElemSize)), nDataElemSize, 1, hFile) != 1) {
 					if (ferror(hFile)) {
 						errprintf("MappedTensor:mapped_tensor_shim:FileWriteError",
@@ -809,7 +813,7 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 					}
             }
             
-            // - Skip the required number of elements (one was already skipped due to the write above)
+            /* - Skip the required number of elements (one was already skipped due to the write above) */
             fseek(hFile, (uChunkSkip-1) * nDataElemSize, SEEK_CUR);
 				
 				dprintf("mts/cwc: Skip-write chunk: Skipping over [%ld] bytes\n", (uChunkSkip-1) * nDataElemSize);
@@ -817,7 +821,7 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }
    }
 	
-	// - Flush stream
+	/* - Flush stream */
 	if (fflush(hFile) == EOF) {
 		errprintf("MappedTensor:mapped_tensor_shim:FileWriteError",
 					 "Error on writing file.  Could not flush stream",
@@ -871,7 +875,7 @@ end
 
 
 
-// -- Helper functions
+/* -- Helper functions */
 
 void DisplayHelp()
 {
@@ -956,7 +960,7 @@ mxClassID ClassIDForClassName(const char *strClassName, size_t nLength)
 }
 
 
-// --- Endian managing functions
+/* --- Endian managing functions */
 
 uint16_t ByteSwap16(uint16_t *nData) {
    *nData = ((*nData & 0xFF) << 8) | ((*nData & 0xFF00) >> 8);

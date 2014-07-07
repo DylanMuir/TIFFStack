@@ -123,7 +123,7 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 % 20120703 Different way of reading zip file contents guarantees that ROI order
 %           is preserved
 %
-% Copyright (c) 2011, 2012 Dylan Muir <muir@hifo.uzh.ch>
+% Copyright (c) 2011, 2012, 2013, 2014 Dylan Muir <muir@hifo.uzh.ch>
 %
 % This program is free software; you can redistribute it and/or
 % modify it under the terms of the GNU General Public License

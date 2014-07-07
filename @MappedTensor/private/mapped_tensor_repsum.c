@@ -10,29 +10,34 @@
  * Created: 17th July, 2012
  */
 
+/* - Fix char16_t definition bug in OS X 10.9 */
+#ifndef char16_t
+	#include <stdint.h>
+	typedef uint16_t char16_t;
+#endif
 #include "mex.h"
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
-   // - Local variables
+   /* - Local variables */
    double   *vfSourceA, *vfSourceB, *vfDest;
    mwSize   uNumelA, uNumelB,
             uIndexA, uIndexB, uIndexDest;
    
-   // - Get arguments and sizes
+   /* - Get arguments and sizes */
    uNumelA = mxGetM(prhs[0]) * mxGetN(prhs[0]);
    uNumelB = mxGetM(prhs[1]) * mxGetN(prhs[1]);
    
    vfSourceA = mxGetPr(prhs[0]);
    vfSourceB = mxGetPr(prhs[1]);
    
-   // - Allocate destination vector
+   /* - Allocate destination vector */
    if ((plhs[0] = mxCreateNumericMatrix(uNumelA * uNumelB, 1, mxDOUBLE_CLASS, mxREAL)) == NULL) {
       mexErrMsgIdAndTxt("MappedTensor:mapped_tensor_repsum:Memory", "Could not allocate memory.");
    }
    vfDest = mxGetPr(plhs[0]);
    
    
-   // -- Replicate vector A, add elements of vector B in turn
+   /* -- Replicate vector A, add elements of vector B in turn */
       
    uIndexDest = 0;
    for (uIndexB = 0; uIndexB < uNumelB; uIndexB++) {
