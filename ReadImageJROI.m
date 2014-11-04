@@ -16,7 +16,7 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 % cell array of ROI structures.
 %
 % The field '.strName' is guaranteed to exist, and contains the ROI name (the
-% filename minus '.roi').
+% filename minus '.roi', or the name set for the ROI).
 %
 % The field '.strType' is guaranteed to exist, and defines the ROI type:
 % {'Rectangle', 'Oval', Line', 'Polygon', 'Freehand', 'Traced', 'PolyLine',
@@ -28,12 +28,16 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 % The field '.nVersion' is guaranteed to exist, and defines the version number
 % of the ROI format.
 %
+% The field '.vnPosition' is guaranteed to exist. If the information is
+% defined within the ROI, this field will be a three-element vector
+% [nCPosition nZPosition nTPosition].
+%
 % ROI types:
 %  Rectangle:
 %     .strType = 'Rectangle';
 %     .nArcSize         - The arc size of the rectangle's rounded corners
 %
-%      For a composite, "shape" ROI:
+%      For a composite, 'shape' ROI:
 %     .strSubtype = 'Shape';
 %     .vfShapeSegments  - A long, complicated vector of complicated shape
 %                          segments.  This vector is in the format passed to the
@@ -113,9 +117,10 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 %     .strFontName      - The name of the font to render the text with
 %     .strText          - A string containing the text
 
-% Author: Dylan Muir <muir@hifo.uzh.ch>
+% Author: Dylan Muir <dylan.muir@unibas.ch>
 % Created: 9th August, 2011
 %
+% 20141020 Added code to read 'header 2' fields; thanks to Luca Nocetti
 % 20140602 Bug report contributed by Samuel Barnes and Yousef Mazaheri
 % 20110810 Bug report contributed by Jean-Yves Tinevez
 % 20110829 Bug fix contributed by Benjamin Ricca <ricca@berkeley.edu>
@@ -123,7 +128,7 @@ function [sROI] = ReadImageJROI(cstrFilenames)
 % 20120703 Different way of reading zip file contents guarantees that ROI order
 %           is preserved
 %
-% Copyright (c) 2011, 2012, 2013, 2014 Dylan Muir <muir@hifo.uzh.ch>
+% Copyright (c) 2011, 2012, 2013, 2014 Dylan Muir <dylan.muir@unibas.ch>
 %
 % This program is free software; you can redistribute it and/or
 % modify it under the terms of the GNU General Public License
@@ -207,9 +212,6 @@ if (~isequal(strMagic, 'Iout'))
       '*** ReadImageJROI: The file was not an ImageJ ROI format.');
 end
 
-% -- Set ROI name
-[nul, sROI.strName] = fileparts(strFilename); %#ok<ASGLU>
-
 % -- Read version
 sROI.nVersion = fread(fidROI, 1, 'int16');
 
@@ -235,6 +237,48 @@ nArrowStyle = fread(fidROI, 1, 'uint8');
 nArrowHeadSize = fread(fidROI, 1, 'uint8');
 nRoundedRectArcSize = fread(fidROI, 1, 'int16');
 sROI.nPosition = fread(fidROI, 1, 'uint32');
+
+
+% -- Read the 'header 2' fields
+nHeader2Offset = fread(fidROI, 1, 'uint32');
+
+if (nHeader2Offset > 0) && ~fseek(fidROI, nHeader2Offset+32+4, 'bof') 
+   % - Seek to start of header 2
+   fseek(fidROI, nHeader2Offset+4, 'bof');
+   
+   % - Read fields
+   sROI.vnPosition = fread(fidROI, 3, 'uint32')';
+   vnNameParams = fread(fidROI, 2, 'uint32')';
+   nOverlayLabelColor = fread(fidROI, 1, 'uint32'); %#ok<NASGU>
+   nOverlayFontSize = fread(fidROI, 1, 'int16'); %#ok<NASGU>
+   fseek(fidROI, 1, 'cof');   % Skip a byte
+   nOpacity = fread(fidROI, 1, 'uint8'); %#ok<NASGU>
+   nImageSize = fread(fidROI, 1, 'uint32'); %#ok<NASGU>
+   fStrokeWidth = fread(fidROI, 1, 'float32'); %#ok<NASGU>
+   vnROIPropertiesParams = fread(fidROI, 2, 'uint32')'; %#ok<NASGU>
+   
+else
+   sROI.vnPosition = [];
+   vnNameParams = [0 0];
+   nOverlayLabelColor = []; %#ok<NASGU>
+   nOverlayFontSize = []; %#ok<NASGU>
+   nOpacity = []; %#ok<NASGU>
+   nImageSize = []; %#ok<NASGU>
+   fStrokeWidth = []; %#ok<NASGU>
+   vnROIPropertiesParams = [0 0]; %#ok<NASGU>
+end
+
+
+% -- Set ROI name
+if (isempty(vnNameParams) || any(vnNameParams == 0) || fseek(fidROI, sum(vnNameParams), 'bof'))
+   [nul, sROI.strName] = fileparts(strFilename); %#ok<ASGLU>
+
+else
+   % - Try to read ROI name from header
+   fseek(fidROI, vnNameParams(1), 'bof');
+   sROI.strName = fread(fidROI, vnNameParams(2), 'int16=>char')';
+end
+
 
 % - Seek to get aspect ratio
 fseek(fidROI, 52, 'bof');

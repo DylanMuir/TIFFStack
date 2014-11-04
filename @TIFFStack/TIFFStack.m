@@ -81,6 +81,13 @@ classdef TIFFStack < handle
    methods
       % TIFFStack - CONSTRUCTOR
       function oStack = TIFFStack(strFilename, bInvert)
+         % - Check usage
+         if (~exist('strFilename', 'var') || ~ischar(strFilename))
+            help TIFFStack;
+            error('TIFFStack:Usage', ...
+                  '*** TIFFStack: Incorrect usage.');
+         end
+         
          % - Can we use the accelerated TIFF library?
          if (exist('tifflib') ~= 3) %#ok<EXIST>
             % - Try to copy the library
@@ -243,7 +250,9 @@ classdef TIFFStack < handle
       function delete(oStack)
          if (oStack.bUseTiffLib)
             % - Close the TIFF file, if opened by TiffLib
-            tifflib('close', oStack.TIF);
+            if (isfield(oStack, 'TIF') && ~isempty(oStack.TIF))
+               tifflib('close', oStack.TIF);
+            end
 
          else
             % - Close the TIFF file, if opened by tiffread29_header
@@ -277,8 +286,8 @@ classdef TIFFStack < handle
                   
                   % - Get equivalent subscripted indexes and permute
                   vnTensorSize = size(oStack);
-                  [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, subs.subs{1});
-                  [S.subs{1}] = ind2sub(oStack.vnDataSize, cIndices{vnInvOrder});
+                  [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
+                  S.subs = cIndices(vnInvOrder);
                   
                elseif (nNumDims < nNumTotalDims)
                   % - Assume trailing references are ':'
@@ -588,7 +597,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
    
    tlStack = oStack.TIF;
    
-   try
+%    try
       % - Loop over images in stack
       for (nImage = 1:numel(cIndices{3}))
          % - Skip to this image in stack
@@ -599,13 +608,13 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
          tfData(:, :, nImage, :) = tfImage;
       end
       
-   catch mErr
-      % - Record error state
-      base_ME = MException('TIFFStack:ReadError', ...
-                           '*** TIFFStack: Could not read data from image file.');
-      new_ME = addCause(base_ME, mErr);
-      throw(new_ME);
-   end
+%    catch mErr
+%       % - Record error state
+%       base_ME = MException('TIFFStack:ReadError', ...
+%                            '*** TIFFStack: Could not read data from image file.');
+%       new_ME = addCause(base_ME, mErr);
+%       throw(new_ME);
+%    end
    
    % - Do we need to resample the data block?
    bResample = any(~vbIsColon(1:3));
@@ -625,8 +634,8 @@ function [tfImage] = TS_read_Tiff_striped_separate(tfImage, tlStack, spp, h, rps
    for r = 1:rps:h
       row_inds = r:min(h,r+rps-1);
       for k = 1:spp
-         stripNum = tifflib('computeStrip', oStack.TIF, r, k);
-         tfImage(row_inds,:,k) = tifflib('readEncodedStrip', tlStack, stripNum);
+         stripNum = tifflib('computeStrip', oStack.TIF, r-1, k-1);
+         tfImage(row_inds,:,k) = tifflib('readEncodedStrip', tlStack, stripNum-1);
       end
    end
 end
@@ -636,8 +645,8 @@ end
 function [tfImage] = TS_read_Tiff_striped_chunky(tfImage, tlStack, ~, h, rps, ~, ~)
    for r = 1:rps:h
       row_inds = r:min(h,r+rps-1);
-      stripNum = tifflib('computeStrip', tlStack, r);
-      tfImage(row_inds,:,:) = tifflib('readEncodedStrip', tlStack, stripNum);
+      stripNum = tifflib('computeStrip', tlStack, r-1);
+      tfImage(row_inds,:,:) = tifflib('readEncodedStrip', tlStack, stripNum-1);
    end
 end
 
@@ -649,8 +658,8 @@ function [tfImage] = TS_read_Tiff_tiled_separate(tfImage, tlStack, spp, ~, ~, tW
       for c = 1:tWidth:w
          col_inds = c:min(w,c+tWidth-1);
          for k = 1:spp
-            tileNumber = tifflib('computeTile', tlStack, [r c], k);
-            tfImage(row_inds,col_inds,k) = tifflib('readEncodedTile', tlStack, tileNumber);
+            tileNumber = tifflib('computeTile', tlStack, [r c]-1, k);
+            tfImage(row_inds,col_inds,k) = tifflib('readEncodedTile', tlStack, tileNumber-1);
          end
       end
    end
@@ -663,8 +672,8 @@ function [tfImage] = TS_read_Tiff_tiled_chunky(tfImage, tlStack, ~, ~, ~, tWidth
       row_inds = r:min(h,r+tHeight-1);
       for c = 1:tWidth:w
          col_inds = c:min(w,c+tWidth-1);
-         tileNumber = tifflib('computeTile', tlStack, [r c]);
-         tfImage(row_inds,col_inds,:) = tifflib('readEncodedTile', tlStack, tileNumber);
+         tileNumber = tifflib('computeTile', tlStack, [r c]-1);
+         tfImage(row_inds,col_inds,:) = tifflib('readEncodedTile', tlStack, tileNumber-1);
       end
    end
 end
