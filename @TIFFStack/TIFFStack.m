@@ -276,18 +276,16 @@ classdef TIFFStack < handle
                
                % - Check dimensionality and trailing dimensions
                if (nNumDims == 1)
-                  % - Translate from linear refs to indices
-                  nNumDims = nNumTotalDims;
-                  
                   % - Translate colon indexing
                   if (isequal(S.subs{1}, ':'))
-                     S.subs{1} = (1:prod(oStack.vnDataSize))';
+                     S.subs = num2cell(repmat(':', 1, nNumTotalDims));
+
+                  else
+                     % - Get equivalent subscripted indexes and permute
+                     vnTensorSize = size(oStack);
+                     [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
+                     S.subs = cIndices(vnInvOrder);
                   end
-                  
-                  % - Get equivalent subscripted indexes and permute
-                  vnTensorSize = size(oStack);
-                  [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
-                  S.subs = cIndices(vnInvOrder);
                   
                elseif (nNumDims < nNumTotalDims)
                   % - Assume trailing references are ':'
@@ -338,7 +336,10 @@ classdef TIFFStack < handle
                
                % - Reshape return data to concatenate trailing dimensions (just as
                % matlab does)
-               if (nNumDims < nNumTotalDims)
+               if (nNumDims == 1)
+                  tfData = reshape(tfData, 1, []);
+               
+               elseif (nNumDims < nNumTotalDims)
                   cnSize = num2cell(size(tfData));
                   tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
                end
@@ -597,24 +598,24 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
    
    tlStack = oStack.TIF;
    
-%    try
+   try
       % - Loop over images in stack
       for (nImage = 1:numel(cIndices{3}))
          % - Skip to this image in stack
-         tifflib('setDirectory', tlStack, cIndices{3}(nImage));
+         tifflib('setDirectory', tlStack, cIndices{3}(nImage)-1);
          
          % - Read data from this image, overwriting frame buffer
          tfImage = oStack.fhReadFun(tfImage, tlStack, spp, h, rps, tw, th);
          tfData(:, :, nImage, :) = tfImage;
       end
       
-%    catch mErr
-%       % - Record error state
-%       base_ME = MException('TIFFStack:ReadError', ...
-%                            '*** TIFFStack: Could not read data from image file.');
-%       new_ME = addCause(base_ME, mErr);
-%       throw(new_ME);
-%    end
+   catch mErr
+      % - Record error state
+      base_ME = MException('TIFFStack:ReadError', ...
+                           '*** TIFFStack: Could not read data from image file.');
+      new_ME = addCause(base_ME, mErr);
+      throw(new_ME);
+   end
    
    % - Do we need to resample the data block?
    bResample = any(~vbIsColon(1:3));
