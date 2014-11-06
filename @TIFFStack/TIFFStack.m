@@ -605,7 +605,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
          tifflib('setDirectory', tlStack, cIndices{3}(nImage)-1);
          
          % - Read data from this image, overwriting frame buffer
-         tfImage = oStack.fhReadFun(tfImage, tlStack, spp, h, rps, tw, th);
+         tfImage = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th);
          tfData(:, :, nImage, :) = tfImage;
       end
       
@@ -631,7 +631,7 @@ end
 
 % TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
 % striped separate TIFF files
-function [tfImage] = TS_read_Tiff_striped_separate(tfImage, tlStack, spp, h, rps, ~, ~)
+function [tfImage] = TS_read_Tiff_striped_separate(tfImage, tlStack, spp, ~, h, rps, ~, ~)
    for r = 1:rps:h
       row_inds = r:min(h,r+rps-1);
       for k = 1:spp
@@ -641,9 +641,9 @@ function [tfImage] = TS_read_Tiff_striped_separate(tfImage, tlStack, spp, h, rps
    end
 end
 
-% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% TS_read_Tiff_striped_chunky - FUNCTION Read an image using tifflib, for
 % striped chunk TIFF files
-function [tfImage] = TS_read_Tiff_striped_chunky(tfImage, tlStack, ~, h, rps, ~, ~)
+function [tfImage] = TS_read_Tiff_striped_chunky(tfImage, tlStack, ~, ~, h, rps, ~, ~)
    for r = 1:rps:h
       row_inds = r:min(h,r+rps-1);
       stripNum = tifflib('computeStrip', tlStack, r-1);
@@ -651,9 +651,9 @@ function [tfImage] = TS_read_Tiff_striped_chunky(tfImage, tlStack, ~, h, rps, ~,
    end
 end
 
-% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% TS_read_Tiff_tiled_separate - FUNCTION Read an image using tifflib, for
 % tiled separate TIFF files
-function [tfImage] = TS_read_Tiff_tiled_separate(tfImage, tlStack, spp, ~, ~, tWidth, tHeight)
+function [tfImage] = TS_read_Tiff_tiled_separate(tfImage, tlStack, spp, w, h, ~, tWidth, tHeight)
    for r = 1:tHeight:h
       row_inds = r:min(h,r+tHeight-1);
       for c = 1:tWidth:w
@@ -666,9 +666,9 @@ function [tfImage] = TS_read_Tiff_tiled_separate(tfImage, tlStack, spp, ~, ~, tW
    end
 end
 
-% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% TS_read_Tiff_tiled_chunky - FUNCTION Read an image using tifflib, for
 % tiled chunky TIFF files
-function [tfImage] = TS_read_Tiff_tiled_chunky(tfImage, tlStack, ~, ~, ~, tWidth, tHeight)
+function [tfImage] = TS_read_Tiff_tiled_chunky(tfImage, tlStack, ~, w, h, ~, tWidth, tHeight)
    for r = 1:tHeight:h
       row_inds = r:min(h,r+tHeight-1);
       for c = 1:tWidth:w
