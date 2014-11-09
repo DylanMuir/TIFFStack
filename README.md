@@ -11,13 +11,13 @@ This is the source repository for FocusStack, a Matlab toolbox for analysis of t
 ### How to contribute ###
 
 * Firstly, thanks for your willingness to help! Documentation improvements, especially on the [FocusStack wiki](https://bitbucket.org/DylanMuir/twophotonanalysis/wiki), are especially useful. Bug fixes and feature contributions are an amazing contribution.
-* Also very desirable is testing the toolbox under Octave, and ensuring compatibility. Thus far, compatibility has not been tested
-* If you would like to contribute a patch or bug fix, write to Dylan Muir (<dylan.muir@unibas.ch>) to request write access to the repository.
+* Also very desirable is testing the toolbox under Octave, and ensuring compatibility. Thus far, compatibility has not been tested.
+* If you would like to contribute a patch or bug fix, write to Dylan Muir (<dylan.muir@unibas.ch>) to request write access to the repository, or send a pull request.
 * Create a feature branch to encapsulate your code changes.
 * After completing, documenting and testing your code, create a pull request for your branch to be integrated into the master branch.
 * You may also of course fork the repository, work on your fork (under a feature branch, of course), and then create a pull request as above.
 
-### Who do I talk to? ###
+### Whom do I talk to? ###
 
 * In general the toolbox is supplied "as-is", with only moderate support
 * Please use the [Issues tracker](https://bitbucket.org/DylanMuir/twophotonanalysis/issues) to report bugs and feature suggestions
