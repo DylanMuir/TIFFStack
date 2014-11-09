@@ -293,7 +293,9 @@ classdef FocusStack < handle
       
       % get.nNumStimuli - GETTER for 'nNumStimuli'
       function [nNumStimuli] = get.nNumStimuli(oStack)
-         vnSequenceIDs = [oStack.cvnSequenceIDs{:}];
+         cvnSeqIDs = oStack.cvnSequenceIDs;
+         cvnSeqIDs = cellfun(@(c)(reshape(c, 1, [])), cvnSeqIDs, 'UniformOutput', false);
+         vnSequenceIDs = cat(2, cvnSeqIDs{:});
          nNumStimuli = numel(unique(vnSequenceIDs(~isnan(vnSequenceIDs))));
       end
       
