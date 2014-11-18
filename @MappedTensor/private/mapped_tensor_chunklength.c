@@ -7,7 +7,7 @@
  */
 
 /* - Fix char16_t definition bug in OS X 10.9 */
-#ifndef cher16_t
+#ifndef char16_t
 	#include <stdint.h>
 	typedef uint16_t char16_t;
 #endif
