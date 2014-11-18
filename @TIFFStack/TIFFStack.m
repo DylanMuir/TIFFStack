@@ -412,7 +412,18 @@ classdef TIFFStack < handle
       function [oStack] = transpose(oStack)
          oStack = permute(oStack, [2 1]);
       end
-      
+
+%% --- Overloaded end
+
+      function nLength = end(oStack, nEndDim, nTotalRefDims)
+         vnSizes = size(oStack);
+         if (nEndDim < nTotalRefDims)
+            nLength = vnSizes(nEndDim);
+         else
+            nLength = prod(vnSizes(nEndDim:end));
+         end
+      end
+
 %% --- Property accessors
 
       % set.bInvert - SETTER method for 'bInvert'
