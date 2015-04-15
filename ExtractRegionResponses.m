@@ -137,8 +137,12 @@ end
 % - Extract the region blanks
 if (~isempty(nBlankStimID))
    vbBlankFrames = (vnStimulusSeqID == nBlankStimID) & vbUseFrame;
-else
+
+elseif (bSegmentStack)
    vbBlankFrames = ~vbUseFrame;
+
+else
+   vbBlankFrames = false(1, nNumFrames);
 end
 
 [cmfBlankTrace, cvfRegionBlank] = fhExtractionFunction(fsStack, sRegions.PixelIdxList, vbBlankFrames);

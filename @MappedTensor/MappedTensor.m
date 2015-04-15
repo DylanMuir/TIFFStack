@@ -7,6 +7,14 @@
 % copy the handle and not the data.  Modifying one tensor will modify all the
 % copies!
 %
+% If this software is useful to your academic work, please cite our
+% publication in lieu of thanks:
+%
+% D R Muir and B M Kampa, 2015. "FocusStack and StimServer: a new open
+%    source MATLAB toolchain for visual stimulation and analysis of two-photon
+%    calcium neuronal imaging data". Frontiers in Neuroinformatics 8 (85).
+%    DOI: 10.3389/fninf.2014.00085
+%
 % Creation: mtVariable = MappedTensor(vnTensorSize)
 %           mtVariable = MappedTensor(nDim1, nDim2, nDim3, ...)
 %           mtVariable = MappedTensor(nSquareDim, ...)

@@ -165,7 +165,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
 /* -- Command functions */
 
-// Usage: [hFileHandle, strDefaultMachineFormat] = mapped_tensor_shim('open', strFilename);
+/* Usage: [hFileHandle, strDefaultMachineFormat] = mapped_tensor_shim('open', strFilename); */
 void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
    /* -- Local variables */

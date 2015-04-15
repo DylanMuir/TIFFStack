@@ -6,12 +6,18 @@
 % entire image stack is treated as a matlab tensor.  Each frame of the file must
 % have the same dimensions.  Reading the image data is optimised to the extent
 % possible; the header information is only read once.
+%
+% If this software is useful to your academic work, please cite our
+% publication in lieu of thanks:
+%
+% D R Muir and B M Kampa, 2015. "FocusStack and StimServer: a new open
+%    source MATLAB toolchain for visual stimulation and analysis of two-photon
+%    calcium neuronal imaging data". Frontiers in Neuroinformatics 8 (85).
+%    DOI: 10.3389/fninf.2014.00085
 % 
 % This class attempts to use the version of tifflib built-in to recent
 % versions of Matlab, if available.  Otherwise this class uses a modified
-% version of tiffread [1, 2] to read data.  Code is included (but disabled)
-% to use the matlab imread function, but imread returns invalid data for
-% some TIFF formats.
+% version of tiffread [1, 2] to read data.
 %
 % permute, ipermute and transpose are now transparantly supported. Note
 % that to read a pixel, the entire frame containing that pixel is read. So
@@ -200,23 +206,33 @@ classdef TIFFStack < handle
                            '*** TIFFStack: The sample format of this TIFF stack is not supported.');
                end
                
-               % - Assign accelerated reading function
+               % -- Assign accelerated reading function
+               strReadFun = 'TS_read_Tiff';
+               
+               % - Tiled or striped
                if (tifflib('isTiled', oStack.TIF))
-                  if (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Chunky))
-                     oStack.fhReadFun = @TS_read_Tiff_tiled_chunky;
-                     
-                  elseif (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Separate))
-                     oStack.fhReadFun = @TS_read_Tiff_tiled_separate;
-                  end
-                  
+                  strReadFun = [strReadFun '_tiled'];
                else
-                  if (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Chunky))
-                     oStack.fhReadFun = @TS_read_Tiff_striped_chunky;
-                     
-                  elseif (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Separate))
-                     oStack.fhReadFun = @TS_read_Tiff_striped_separate;
-                  end
+                  strReadFun = [strReadFun '_striped'];
                end
+               
+               % - Chunky or planar
+               if (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Chunky))
+                  strReadFun = [strReadFun '_chunky'];
+               elseif (isequal(TiffgetTag(oStack.TIF, 'PlanarConfiguration'), Tiff.PlanarConfiguration.Separate))
+                  strReadFun = [strReadFun '_planar'];
+               else
+                  error('TIFFStack:UnsupportedFormat', ...
+                        '*** TIFFStack: The planar configuration of this TIFF stack is not supported.');
+               end
+               
+               % - Use versions for pre-2014 matlab
+               if (verLessThan('matlab', '8.3'))
+                  strReadFun = [strReadFun '_pre2014'];
+               end
+               
+               % - Convert into function handle
+               oStack.fhReadFun = str2func(strReadFun);
                
             else
                % - Read TIFF header for tiffread29
@@ -279,11 +295,12 @@ classdef TIFFStack < handle
                   % - Translate colon indexing
                   if (isequal(S.subs{1}, ':'))
                      S.subs = num2cell(repmat(':', 1, nNumTotalDims));
+                     nNumDims = 4;
 
                   else
                      % - Get equivalent subscripted indexes and permute
                      vnTensorSize = size(oStack);
-                     [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
+                     [cIndices{1:nNumTotalDims}] = ind2sub(vnTensorSize, S.subs{1});
                      S.subs = cIndices(vnInvOrder);
                   end
                   
@@ -326,20 +343,19 @@ classdef TIFFStack < handle
                
                % - Access stack (tifflib or tiffread)
                if (oStack.bUseTiffLib)
-                  tfData = TS_read_data_Tiff(oStack, S.subs);
+                  tfData = TS_read_data_Tiff(oStack, S.subs, nNumDims == 1);
                else
-                  tfData = TS_read_data_tiffread(oStack, S.subs);
+                  tfData = TS_read_data_tiffread(oStack, S.subs, nNumDims == 1);
                end
                
-               % - Permute dimensions
-               tfData = permute(tfData, oStack.vnDimensionOrder);
+               % - Permute dimensions, if linear indexing has not been used
+               if (nNumDims > 1)
+                  tfData = permute(tfData, oStack.vnDimensionOrder);
+               end
                
                % - Reshape return data to concatenate trailing dimensions (just as
                % matlab does)
-               if (nNumDims == 1)
-                  tfData = reshape(tfData, 1, []);
-               
-               elseif (nNumDims < nNumTotalDims)
+               if (nNumDims > 1) && (nNumDims < nNumTotalDims)
                   cnSize = num2cell(size(tfData));
                   tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
                end
@@ -353,20 +369,31 @@ classdef TIFFStack < handle
          end
       end
       
-%% --- Overloaded size
+%% --- Overloaded size, permute, ipermute, ctranspose, transpose
       function [varargout] = size(oStack, vnDimensions)
          % - Return the size of the stack, permuted
          vnSize = oStack.vnDataSize(oStack.vnDimensionOrder);
          
+         % - Find last non-unitary dimension and trim
+         nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
+         if (nLastNonUnitary < numel(vnSize))
+            vnSize = vnSize(1:nLastNonUnitary);
+         end
+         
          % - Return specific dimension(s)
          if (exist('vnDimensions', 'var'))
-            if (~isnumeric(vnDimensions))
+            if (~isnumeric(vnDimensions) || any(vnDimensions < 1))
                error('TIFFStack:dimensionMustBePositiveInteger', ...
-                  '*** TIFFStack: Dimensions argument must be a positive integer within indexing range.');
+                  '*** TIFFStack: Dimensions argument must be a positive integer.');
             end
             
+            vbExtraDimensions = vnDimensions > numel(vnSize);
+            
             % - Return the specified dimension(s)
-            vnSize = vnSize(vnDimensions);
+            vnSizeOut(~vbExtraDimensions) = vnSize(vnDimensions(~vbExtraDimensions));
+            vnSizeOut(vbExtraDimensions) = 1;
+         else
+            vnSizeOut = vnSize;
          end
          
          % - Handle differing number of size dimensions and number of output
@@ -375,20 +402,20 @@ classdef TIFFStack < handle
          
          if (nNumArgout == 1)
             % - Single return argument -- return entire size vector
-            varargout{1} = vnSize;
+            varargout{1} = vnSizeOut;
             
-         elseif (nNumArgout <= numel(vnSize))
+         elseif (nNumArgout <= numel(vnSizeOut))
             % - Several return arguments -- return single size vector elements,
             % with the remaining elements grouped in the last value
-            varargout(1:nNumArgout-1) = num2cell(vnSize(1:nNumArgout-1));
-            varargout{nNumArgout} = prod(vnSize(nNumArgout:end));
+            varargout(1:nNumArgout-1) = num2cell(vnSizeOut(1:nNumArgout-1));
+            varargout{nNumArgout} = prod(vnSizeOut(nNumArgout:end));
             
          else %(nNumArgout > numel(vnSize))
             % - Output all size elements
-            varargout(1:numel(vnSize)) = num2cell(vnSize);
+            varargout(1:numel(vnSizeOut)) = num2cell(vnSizeOut);
             
             % - Deal out trailing dimensions as '1'
-            varargout(numel(vnSize)+1:nNumArgout) = {1};
+            varargout(numel(vnSizeOut)+1:nNumArgout) = {1};
          end
       end
       
@@ -443,77 +470,6 @@ end
 
 %% --- Helper functions ---
 
-% TS_read_data_imread - FUNCTION Read the requested pixels from the TIFF file (using imread)
-%
-% Usage: [tfData] = TS_read_data_imread(oStack, cIndices)
-%
-% 'oStack' is a TIFFStack.  'cIndices' are the indices passed in from subsref.
-% Colon indexing will be converted to full range indexing.  Reading is optimsed,
-% by only reading pixels in a minimal-size window surrouding the requested
-% pixels.  cIndices is a cell array with the format {rows, cols, frames,
-% slices}.  Slices are RGB or CMYK or so on.
-
-function [tfData] = TS_read_data_imread(oStack, cIndices) %#ok<DEFNU>
-   % - Convert colon indexing
-   vbIsColon = cellfun(@(c)(isequal(c, ':')), cIndices);
-   
-   for (nColonDim = find(vbIsColon))
-      cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
-   end
-      
-   % - Check ranges
-   vnMinRange = cellfun(@(c)(min(c)), cIndices);
-   vnMaxRange = cellfun(@(c)(max(c)), cIndices);
-   
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
-      error('TIFFStack:badsubscript', ...
-            '*** TIFFStack: Index exceeds stack dimensions.');
-   end
-   
-   % - Allocate large tensor
-   vnBlockSize = vnMaxRange(1:2) - vnMinRange(1:2) + [1 1];
-   vnBlockSize(3) = numel(cIndices{3});
-   vnBlockSize(4) = oStack.vnDataSize(4);
-   tfDataBlock = zeros(vnBlockSize, oStack.strDataClass);
-   cBlock = {[vnMinRange(1) vnMaxRange(1)] [vnMinRange(2) vnMaxRange(2)]};
-   
-   % - Loop over frames to read data block
-   try
-      % - Disable warnings
-      wOld = warning('off', 'MATLAB:rtifc:notPhotoTransformed');
-      
-      for (nFrame = 1:numel(cIndices{3})) %#ok<FORPF>
-         tfDataBlock(:, :, nFrame, :) = imread(oStack.strFilename, 'TIFF', cIndices{3}(nFrame), 'PixelRegion', cBlock);
-      end
-      
-      % - Re-enable warnings
-      warning(wOld);
-      
-   catch mErr
-      % - Record error state
-      base_ME = MException('TIFFStack:ReadError', ...
-                           '*** TIFFStack: Could not read data from image file.');
-      new_ME = addCause(base_ME, mErr);
-      throw(new_ME);
-   end
-   
-   % - Do we need to resample the data block?
-   bResample = any(~vbIsColon(1:3));
-   if (bResample)
-      cIndices{1} = cIndices{1} - vnMinRange(1) + 1;
-      cIndices{2} = cIndices{2} - vnMinRange(2) + 1;
-      tfData = tfDataBlock(cIndices{1}, cIndices{2}, :, cIndices{4});
-   else
-      tfData = tfDataBlock;
-   end
-   
-   % - Invert data if requested
-   if (oStack.bInvert)
-      tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
-   end
-end
-
-
 % TS_read_data_tiffread - FUNCTION Read the requested pixels from the TIFF file (using tiffread29)
 %
 % Usage: [tfData] = TS_read_data_imread(oStack, cIndices)
@@ -523,7 +479,7 @@ end
 % array with the format {rows, cols, frames, slices}.  Slices are RGB or CMYK
 % or so on.
 
-function [tfData] = TS_read_data_tiffread(oStack, cIndices)
+function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
    % - Convert colon indexing
    vbIsColon = cellfun(@(c)(ischar(c) & isequal(c, ':')), cIndices);
    
@@ -531,6 +487,10 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices)
       cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
    end
       
+   % - Fix up subsample detection for unitary dimensions
+   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices);
+   vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
+   
    % - Check ranges
    vnMinRange = cellfun(@(c)(min(c)), cIndices);
    vnMaxRange = cellfun(@(c)(max(c)), cIndices);
@@ -540,26 +500,45 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices)
             '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
+   % - Find unique frames to read
+   [vnFrameIndices, ~, vnOrigFrameIndices] = unique(cIndices{3});
+   
    % - Read data block
    try
-      tfDataBlock = tiffread29_readimage(oStack.TIF, oStack.HEADER, cIndices{3});
-           
+      tfDataBlock = tiffread29_readimage(oStack.TIF, oStack.HEADER, vnFrameIndices);
+      
    catch mErr
       % - Record error state
       base_ME = MException('TIFFStack:ReadError', ...
-                           '*** TIFFStack: Could not read data from image file.');
+         '*** TIFFStack: Could not read data from image file.');
       new_ME = addCause(base_ME, mErr);
       throw(new_ME);
    end
-   
-   % - Do we need to resample the data block?
-   bResample = any(~vbIsColon(1:3));
-   if (bResample)
-      tfData = tfDataBlock(cIndices{1}, cIndices{2}, :, cIndices{4});
+      
+   % - Handle linear or subscript indexing
+   if (~bLinearIndexing)
+      % - Select pixels from frames, if necessary
+      if any(~vbIsColon([1 2 4]))
+         tfData = tfDataBlock(cIndices{1}, cIndices{2}, vnOrigFrameIndices, cIndices{4});
+      else
+         tfData = tfDataBlock;
+      end
+
    else
-      tfData = tfDataBlock;
-   end
-   
+      % - Convert frame indices to frame-linear
+      vnFrameLinearIndices = sub2ind(oStack.vnDataSize([1 2 4]), cIndices{1}, cIndices{2}, cIndices{4});
+      
+      % - Allocate return vector
+      tfData = zeros(numel(cIndices{1}), 1, oStack.strDataClass);
+
+      % - Loop over images in stack and extract required frames
+      for (nFrameIndex = 1:numel(vnFrameIndices))
+         vbThesePixels = cIndices{3} == vnFrameIndices(nFrameIndex);
+         mfThisFrame = tfDataBlock(:, :, nFrameIndex, :);
+         tfData(vbThesePixels) = mfThisFrame(vnFrameLinearIndices(vbThesePixels));
+      end
+   end      
+      
    % - Invert data if requested
    if (oStack.bInvert)
       tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
@@ -576,14 +555,18 @@ end
 % array with the format {rows, cols, frames, slices}.  Slices are RGB or CMYK
 % or so on.
 
-function [tfData] = TS_read_data_Tiff(oStack, cIndices)
+function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    % - Convert colon indexing
    vbIsColon = cellfun(@(c)(ischar(c) & isequal(c, ':')), cIndices);
    
    for (nColonDim = find(vbIsColon))
       cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
    end
-      
+
+   % - Fix up subsample detection for unitary dimensions
+   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices);
+   vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
+   
    % - Check ranges
    vnMinRange = cellfun(@(c)(min(c)), cIndices);
    vnMaxRange = cellfun(@(c)(max(c)), cIndices);
@@ -593,45 +576,91 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
             '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
-   % - Allocate tensor for returning data and single frame buffer
-   vnBlockSize = oStack.vnDataSize(1:2);
-   vnBlockSize(3) = numel(cIndices{3});
-   vnBlockSize(4) = oStack.vnDataSize(4);
-   tfData = zeros(vnBlockSize, oStack.strDataClass);
-   tfImage = zeros([vnBlockSize(1:2) 1 vnBlockSize(4)], oStack.strDataClass);
-   
+   % - Get referencing parameters for TIF object
    w = oStack.vnDataSize(2);
    h = oStack.vnDataSize(1);
-   rps = min(oStack.sImageInfo(1).RowsPerStrip, h);   
+   rps = min(oStack.sImageInfo(1).RowsPerStrip, h);
    tw = min(oStack.sImageInfo(1).TileWidth, w);
    th = min(oStack.sImageInfo(1).TileLength, h);
    spp = oStack.sImageInfo(1).SamplesPerPixel;
    
    tlStack = oStack.TIF;
-   
-   try
-      % - Loop over images in stack
-      for (nImage = 1:numel(cIndices{3}))
-         % - Skip to this image in stack
-         tifflib('setDirectory', tlStack, cIndices{3}(nImage)-1);
-         
-         % - Read data from this image, overwriting frame buffer
-         tfImage = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th);
-         tfData(:, :, nImage, :) = tfImage;
-      end
+
+   % - Handle linear or subscript indexing
+   if (~bLinearIndexing)
+      % - Allocate single frame buffer
+      vnBlockSize = oStack.vnDataSize(1:2);
+      vnBlockSize(3) = numel(cIndices{3});
+      vnBlockSize(4) = oStack.vnDataSize(4);
+      tfImage = zeros([vnBlockSize(1:2) 1 vnBlockSize(4)], oStack.strDataClass);
+
+      % - Allocate tensor for returning data
+      vnOutputSize = cellfun(@(c)numel(c), cIndices);
+      tfData = zeros(vnOutputSize, oStack.strDataClass);
       
-   catch mErr
-      % - Record error state
-      base_ME = MException('TIFFStack:ReadError', ...
-                           '*** TIFFStack: Could not read data from image file.');
-      new_ME = addCause(base_ME, mErr);
-      throw(new_ME);
-   end
-   
-   % - Do we need to resample the data block?
-   bResample = any(~vbIsColon(1:3));
-   if (bResample)
-      tfData = tfData(cIndices{1}, cIndices{2}, :, cIndices{4});
+      % - Do we need to resample the data block?
+      bResample = any(~vbIsColon([1 2 4]));
+
+      try
+         % - Loop over images in stack
+         for (nImage = 1:numel(cIndices{3}))
+            % - Skip to this image in stack
+            tifflib('setDirectory', tlStack, cIndices{3}(nImage)-1);
+            
+            % - Read data from this image, overwriting frame buffer
+            [~, tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, []);
+            
+            % - Resample frame, if required
+            if (bResample)
+               tfData(:, :, nImage, :) = tfImage(cIndices{1}, cIndices{2}, cIndices{4});
+            else
+               tfData(:, :, nImage, :) = tfImage;
+            end
+         end
+         
+      catch mErr
+         % - Record error state
+         base_ME = MException('TIFFStack:ReadError', ...
+            '*** TIFFStack: Could not read data from image file.');
+         new_ME = addCause(base_ME, mErr);
+         throw(new_ME);
+      end
+           
+   else
+      % -- Linear indexing
+      
+      % - Allocate return vector
+      tfData = zeros(numel(cIndices{1}), 1, oStack.strDataClass);
+      
+      % - Allocate single-frame buffer
+      vnBlockSize = oStack.vnDataSize(1:2);
+      vnBlockSize(3) = numel(cIndices{3});
+      vnBlockSize(4) = oStack.vnDataSize(4);
+      tfImage = zeros([vnBlockSize(1:2) 1 vnBlockSize(4)], oStack.strDataClass);
+      
+      % - Convert frame indices to frame-linear
+      vnFrameLinearIndices = sub2ind(vnBlockSize([1 2 4]), cIndices{1}, cIndices{2}, cIndices{4});
+      
+      % - Loop over images in stack and extract required frames
+      try
+         for (nImage = unique(cIndices{3})')
+            % - Find corresponding pixels
+            vbThesePixels = cIndices{3} == nImage;
+            
+            % - Skip to this image in stack
+            tifflib('setDirectory', tlStack, nImage-1);
+
+            % - Read the subsampled pixels from the stack
+            [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, vnFrameLinearIndices(vbThesePixels));
+         end
+         
+      catch mErr
+         % - Record error state
+         base_ME = MException('TIFFStack:ReadError', ...
+            '*** TIFFStack: Could not read data from image file.');
+         new_ME = addCause(base_ME, mErr);
+         throw(new_ME);
+      end
    end
    
    % - Invert data if requested
@@ -640,55 +669,167 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices)
    end
 end
 
+%% Accelerated Libtiff reading functions
+
 % TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
 % striped separate TIFF files
-function [tfImage] = TS_read_Tiff_striped_separate(tfImage, tlStack, spp, ~, h, rps, ~, ~)
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_striped_separate(tfImageBuffer, tlStack, spp, ~, h, rps, ~, ~, vnFrameLinearIndices) %#ok<DEFNU>
    for r = 1:rps:h
       row_inds = r:min(h,r+rps-1);
       for k = 1:spp
-         stripNum = tifflib('computeStrip', oStack.TIF, r-1, k-1);
-         tfImage(row_inds,:,k) = tifflib('readEncodedStrip', tlStack, stripNum-1);
+         stripNum = tifflib('computeStrip', tlStack, r-1, k-1);
+         tfImageBuffer(row_inds,:,k) = tifflib('readEncodedStrip', tlStack, stripNum-1);
       end
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
    end
 end
 
 % TS_read_Tiff_striped_chunky - FUNCTION Read an image using tifflib, for
 % striped chunk TIFF files
-function [tfImage] = TS_read_Tiff_striped_chunky(tfImage, tlStack, ~, ~, h, rps, ~, ~)
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_striped_chunky(tfImageBuffer, tlStack, ~, ~, h, rps, ~, ~, vnFrameLinearIndices) %#ok<DEFNU>
    for r = 1:rps:h
       row_inds = r:min(h,r+rps-1);
       stripNum = tifflib('computeStrip', tlStack, r-1);
-      tfImage(row_inds,:,:) = tifflib('readEncodedStrip', tlStack, stripNum-1);
+      tfImageBuffer(row_inds,:,:) = tifflib('readEncodedStrip', tlStack, stripNum-1);
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
    end
 end
 
 % TS_read_Tiff_tiled_separate - FUNCTION Read an image using tifflib, for
 % tiled separate TIFF files
-function [tfImage] = TS_read_Tiff_tiled_separate(tfImage, tlStack, spp, w, h, ~, tWidth, tHeight)
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_separate(tfImageBuffer, tlStack, spp, w, h, ~, tWidth, tHeight, vnFrameLinearIndices) %#ok<DEFNU>
    for r = 1:tHeight:h
       row_inds = r:min(h,r+tHeight-1);
       for c = 1:tWidth:w
          col_inds = c:min(w,c+tWidth-1);
          for k = 1:spp
             tileNumber = tifflib('computeTile', tlStack, [r c]-1, k);
-            tfImage(row_inds,col_inds,k) = tifflib('readEncodedTile', tlStack, tileNumber-1);
+            tfImageBuffer(row_inds,col_inds,k) = tifflib('readEncodedTile', tlStack, tileNumber-1);
          end
       end
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
    end
 end
 
 % TS_read_Tiff_tiled_chunky - FUNCTION Read an image using tifflib, for
 % tiled chunky TIFF files
-function [tfImage] = TS_read_Tiff_tiled_chunky(tfImage, tlStack, ~, w, h, ~, tWidth, tHeight)
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_chunky(tfImageBuffer, tlStack, ~, w, h, ~, tWidth, tHeight, vnFrameLinearIndices) %#ok<DEFNU>
    for r = 1:tHeight:h
       row_inds = r:min(h,r+tHeight-1);
       for c = 1:tWidth:w
          col_inds = c:min(w,c+tWidth-1);
          tileNumber = tifflib('computeTile', tlStack, [r c]-1);
-         tfImage(row_inds,col_inds,:) = tifflib('readEncodedTile', tlStack, tileNumber-1);
+         tfImageBuffer(row_inds,col_inds,:) = tifflib('readEncodedTile', tlStack, tileNumber-1);
       end
    end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
+   end
 end
+
+%% Pre-2014 matlab Tifflib reading functions
+
+% TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
+% striped separate TIFF files
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_striped_separate_pre2014(tfImageBuffer, tlStack, spp, ~, h, rps, ~, ~, vnFrameLinearIndices) %#ok<DEFNU>
+   for r = 1:rps:h
+      row_inds = r:min(h,r+rps-1);
+      for k = 1:spp
+         stripNum = tifflib('computeStrip', tlStack, r, k);
+         tfImageBuffer(row_inds,:,k) = tifflib('readEncodedStrip', tlStack, stripNum);
+      end
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
+   end
+end
+
+% TS_read_Tiff_striped_chunky - FUNCTION Read an image using tifflib, for
+% striped chunk TIFF files
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_striped_chunky_pre2014(tfImageBuffer, tlStack, ~, ~, h, rps, ~, ~, vnFrameLinearIndices) %#ok<DEFNU>
+   for r = 1:rps:h
+      row_inds = r:min(h,r+rps-1);
+      stripNum = tifflib('computeStrip', tlStack, r);
+      tfImageBuffer(row_inds,:,:) = tifflib('readEncodedStrip', tlStack, stripNum);
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
+   end
+end
+
+% TS_read_Tiff_tiled_separate - FUNCTION Read an image using tifflib, for
+% tiled separate TIFF files
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_separate_pre2014(tfImageBuffer, tlStack, spp, w, h, ~, tWidth, tHeight, vnFrameLinearIndices) %#ok<DEFNU>
+   for r = 1:tHeight:h
+      row_inds = r:min(h,r+tHeight-1);
+      for c = 1:tWidth:w
+         col_inds = c:min(w,c+tWidth-1);
+         for k = 1:spp
+            tileNumber = tifflib('computeTile', tlStack, [r c], k);
+            tfImageBuffer(row_inds,col_inds,k) = tifflib('readEncodedTile', tlStack, tileNumber);
+         end
+      end
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
+   end
+end
+
+% TS_read_Tiff_tiled_chunky - FUNCTION Read an image using tifflib, for
+% tiled chunky TIFF files
+function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_chunky_pre2014(tfImageBuffer, tlStack, ~, w, h, ~, tWidth, tHeight, vnFrameLinearIndices) %#ok<DEFNU>
+   for r = 1:tHeight:h
+      row_inds = r:min(h,r+tHeight-1);
+      for c = 1:tWidth:w
+         col_inds = c:min(w,c+tWidth-1);
+         tileNumber = tifflib('computeTile', tlStack, [r c]);
+         tfImageBuffer(row_inds,col_inds,:) = tifflib('readEncodedTile', tlStack, tileNumber);
+      end
+   end
+   
+   % - Perform sub-referencing, if required
+   if (~isempty(vnFrameLinearIndices))
+      vfOutputPixels = tfImageBuffer(vnFrameLinearIndices);
+   else
+      vfOutputPixels = tfImageBuffer;
+   end
+end
+
+%% Accelerated TiffgetTag function
 
 function tagValue = TiffgetTag(oTiff,tagId)
 % getTag  Retrieve tag from image.
