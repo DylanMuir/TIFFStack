@@ -342,10 +342,14 @@ classdef MappedTensor < handle
       end
       
       % my_subsref - Standard array referencing
-      function [tfData] = my_subsref(mtVar, subs)
+      function [tfData] = my_subsref(mtVar, S)
+         % - Test for valid subscripts
+         cellfun(@isvalidsubscript, S.subs);
+         
          % - Re-order reference indices
-         nNumDims = numel(subs.subs);
+         nNumDims = numel(S.subs);
          nNumTotalDims = numel(mtVar.vnDimensionOrder);
+         vnReferencedTensorSize = size(mtVar);
          
          % - Handle different numbers of referencing dimensions
          if (nNumDims == 1)
@@ -353,79 +357,71 @@ classdef MappedTensor < handle
             nNumDims = nNumTotalDims;
             
             % - Translate colon indexing
-            if (iscolon(subs.subs{1}))
-               subs.subs{1} = (1:numel(mtVar))';
+            if (iscolon(S.subs{1}))
+               S.subs{1} = (1:numel(mtVar))';
             end
             
             % - Get equivalent subscripted indexes
             vnTensorSize = size(mtVar);
-            [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, subs.subs{1});
+            [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
             
             % - Permute indices and convert back to linear indexing
             vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
             
             try
-               subs.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
+               S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
             catch
-               error('MappedTensor:InvalidRef', ...
+               error('MappedTensor:badsubscript', ...
                      '*** MappedTensor: Subscript out of range.');
             end
             
          elseif (nNumDims < nNumTotalDims)
-            if (iscolon(subs.subs{end}))
-               % - Pass out trailing colons
-               [subs.subs{nNumDims:nNumTotalDims}] = deal(':');
-               
-            else
-               % - Assume trailing dimensions are wraped up, matlab style, so
-               % we need to compute linear indexing for these trailing
-               % dimensions
-               try
-                  [subs.subs{nNumDims:nNumTotalDims}] = ind2sub(size(mtVar, nNumDims:nNumTotalDims), subs.subs{end});
-               catch
-                  error('MappedTensor:InvalidRef', ...
-                     '*** MappedTensor: Subscript out of range.');
-               end
-            end
-
+            % - Wrap up trailing dimensions, matlab style, using linear indexing
+            vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
+            vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
+            
             % - Inverse permute index order
-            vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            subs.subs = subs.subs(vnInvOrder);
+            vnInvOrder(mtVar.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
+            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder(vnInvOrder ~= 0));
+            S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
             
          elseif (nNumDims == nNumTotalDims)
             % - Simply permute and access tensor
             
             % - Permute index order
             vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            subs.subs = subs.subs(vnInvOrder);
+            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+            S.subs = S.subs(vnInvOrder);
             
          else % (nNumDims > nNumTotalDims)
             % - Check for non-colon references
-            vbNonColon = ~cellfun(@iscolon, subs.subs);
+            vbNonColon = ~cellfun(@iscolon, S.subs);
             
             % - Check only trailing dimensions
             vbNonColon(1:nNumTotalDims) = false;
             
             % - Check trailing dimensions for non-'1' indices
-            if (any(cellfun(@(c)(~isequal(c, 1)), subs.subs(vbNonColon))))
+            if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
                % - This is an error
-               error('MappedTensor:InvalidRef', ...
+               error('MappedTensor:badsubscript', ...
                   '*** MappedTensor: Subscript out of range.');
             end
             
             % - Permute index order
             vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            subs.subs = subs.subs(vnInvOrder);            
+            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+            S.subs = S.subs(vnInvOrder);            
          end
          
          % - Reference the tensor data element
          if (mtVar.bIsComplex)
             % - Get the real and complex parts
-            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
-                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
+            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
+                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
          else
             % - Just return the real part
-            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
          
          % - Permute dimensions
@@ -487,12 +483,16 @@ classdef MappedTensor < handle
       %% Overloaded methods (size, numel, permute, ipermute, ctranspose, transpose, isreal)
       % size - METHOD Overloaded size function
       function [varargout] = size(mtVar, vnDimensions)
+         % - Get original tensor size, and extend dimensions if necessary
+         vnOriginalSize = mtVar.vnOriginalSize; %#ok<PROP>
+         vnOriginalSize(end+1:numel(mtVar.vnDimensionOrder)) = 1; %#ok<PROP>
+         
          % - Return the size of the tensor data element, permuted
-         vnSize = mtVar.vnOriginalSize(mtVar.vnDimensionOrder);
+         vnSize = vnOriginalSize(mtVar.vnDimensionOrder); %#ok<PROP>
          
          % - Return specific dimension(s)
          if (exist('vnDimensions', 'var'))
-            if (~isnumeric(vnDimensions))
+            if (~isnumeric(vnDimensions) || ~all(isreal(vnDimensions)))
                error('MappedTensor:dimensionMustBePositiveInteger', ...
                   '*** MappedTensor: Dimensions argument must be a positive integer within indexing range.');
             end
@@ -538,7 +538,13 @@ classdef MappedTensor < handle
       
       % permute - METHOD Overloaded permute function
       function [mtVar] = permute(mtVar, vnNewOrder)
-         mtVar.vnDimensionOrder(1:numel(vnNewOrder)) = mtVar.vnDimensionOrder(vnNewOrder);
+         vnCurrentOrder = mtVar.vnDimensionOrder;
+         
+         if (numel(vnNewOrder) > numel(vnCurrentOrder))
+            vnCurrentOrder(end+1:numel(vnNewOrder)) = numel(vnCurrentOrder)+1:numel(vnNewOrder);
+         end
+         
+         mtVar.vnDimensionOrder(1:numel(vnNewOrder)) = vnCurrentOrder(vnNewOrder);
       end
       
       % ipermute - METHOD Overloaded ipermute function
@@ -1444,6 +1450,21 @@ end
 % iscolon - FUNCTION Test whether a reference is equal to ':'
 function bIsColon = iscolon(ref)
    bIsColon = ischar(ref) && isequal(ref, ':');
+end
+
+% isvalidsubscript - FUNCTION Test whether a vector contains valid entries
+% for subscript referencing
+function isvalidsubscript(oRefs)
+   try
+      if (islogical(oRefs))
+         validateattributes(oRefs, {'logical'}, {'binary'});
+      else
+         validateattributes(oRefs, {'single', 'double'}, {'integer', 'real', 'positive'});
+      end
+   catch
+      error('MappedTensor:badsubscript', ...
+            '*** MappedTensor: Subscript indices must either be real positive integers or logicals.');
+   end
 end
 
 %% Read / write functions
