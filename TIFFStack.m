@@ -293,7 +293,7 @@ classdef TIFFStack < handle
                % - Check dimensionality and trailing dimensions
                if (nNumDims == 1)
                   % - Translate colon indexing
-                  if (isequal(S.subs{1}, ':'))
+                  if (iscolon(S.subs{1}))
                      S.subs = num2cell(repmat(':', 1, nNumTotalDims));
                      nNumDims = 4;
 
@@ -310,13 +310,20 @@ classdef TIFFStack < handle
                   end
                   
                elseif (nNumDims < nNumTotalDims)
-                  % - Assume trailing references are wrapped up, matlab
-                  % style
-                  try
-                     [S.subs{nNumDims:nNumTotalDims}] = ind2sub(size(oStack, nNumDims:nNumTotalDims), S.subs{end});
-                  catch
-                     error('TIFFStack:InvalidRef', ...
-                        '*** TIFFStack: Subscript out of range.');
+                  if (iscolon(S.subs{end}))
+                     % - Pass out trailing colons
+                     [S.subs{nNumDims:nNumTotalDims}] = deal(':');
+                  
+                  else
+                     % - Assume trailing references are wrapped up, matlab
+                     % style, so we have to compute "linear" indexing for
+                     % the trailing dimensions
+                     try
+                        [S.subs{nNumDims:nNumTotalDims}] = ind2sub(size(oStack, nNumDims:nNumTotalDims), S.subs{end});
+                     catch
+                        error('TIFFStack:InvalidRef', ...
+                           '*** TIFFStack: Subscript out of range.');
+                     end
                   end
                   
                   % - Permute index order
@@ -330,7 +337,7 @@ classdef TIFFStack < handle
                   
                else % (nNumDims > nNumTotalDims)
                   % - Check for non-colon references
-                  vbNonColon = cellfun(@(c)(~ischar(c) | ~isequal(c, ':')), S.subs);
+                  vbNonColon = ~cellfun(@iscolon, S.subs);
                   
                   % - Check only trailing dimensions
                   vbNonColon(1:nNumTotalDims) = false;
@@ -492,7 +499,7 @@ end
 
 function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
    % - Convert colon indexing
-   vbIsColon = cellfun(@(c)(ischar(c) & isequal(c, ':')), cIndices);
+   vbIsColon = cellfun(@iscolon, cIndices);
    
    for (nColonDim = find(vbIsColon))
       cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
@@ -568,7 +575,7 @@ end
 
 function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    % - Convert colon indexing
-   vbIsColon = cellfun(@(c)(ischar(c) & isequal(c, ':')), cIndices);
+   vbIsColon = cellfun(@iscolon, cIndices);
    
    for (nColonDim = find(vbIsColon))
       cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
@@ -912,3 +919,10 @@ function strFullPath = get_full_file_path(strFile)
       throw(new_ME);
    end
 end
+
+% iscolon - FUNCTION Test whether a reference is equal to ':'
+function bIsColon = iscolon(ref)
+   bIsColon = ischar(ref) && isequal(ref, ':');
+end
+
+% --- END of TIFFStack.m ---
