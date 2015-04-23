@@ -300,14 +300,25 @@ classdef TIFFStack < handle
                   else
                      % - Get equivalent subscripted indexes and permute
                      vnTensorSize = size(oStack);
-                     [cIndices{1:nNumTotalDims}] = ind2sub(vnTensorSize, S.subs{1});
+                     try
+                        [cIndices{1:nNumTotalDims}] = ind2sub(vnTensorSize, S.subs{1});
+                     catch
+                        error('TIFFStack:InvalidRef', ...
+                           '*** TIFFStack: Subscript out of range.');
+                     end
                      S.subs = cIndices(vnInvOrder);
                   end
                   
                elseif (nNumDims < nNumTotalDims)
-                  % - Assume trailing references are ':'
-                  S.subs(nNumDims+1:nNumTotalDims) = {':'};
-
+                  % - Assume trailing references are wrapped up, matlab
+                  % style
+                  try
+                     [S.subs{nNumDims:nNumTotalDims}] = ind2sub(size(oStack, nNumDims:nNumTotalDims), S.subs{end});
+                  catch
+                     error('TIFFStack:InvalidRef', ...
+                        '*** TIFFStack: Subscript out of range.');
+                  end
+                  
                   % - Permute index order
                   S.subs = S.subs(vnInvOrder);
                   
