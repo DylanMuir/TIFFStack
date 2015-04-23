@@ -363,12 +363,25 @@ classdef MappedTensor < handle
             
             % - Permute indices and convert back to linear indexing
             vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            subs.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
+            
+            try
+               subs.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
+            catch
+               error('MappedTensor:InvalidRef', ...
+                     '*** MappedTensor: Subscript out of range.');
+            end
             
          elseif (nNumDims < nNumTotalDims)
-            % - Assume trailing dimensions are ':'
-            subs.subs(nNumDims+1:numel(mtVar.vnDimensionOrder)) = {':'};
-            
+            % - Assume trailing dimensions are wraped up, matlab style, so
+            % we need to compute linear indexing for these trailing
+            % dimensions
+            try
+               [subs.subs{nNumDims:nNumTotalDims}] = ind2sub(size(mtVar, nNumDims:nNumTotalDims), subs.subs{end});
+            catch
+               error('MappedTensor:InvalidRef', ...
+                     '*** MappedTensor: Subscript out of range.');
+            end
+
             % - Inverse permute index order
             vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
             subs.subs = subs.subs(vnInvOrder);
@@ -390,8 +403,8 @@ classdef MappedTensor < handle
             % - Check trailing dimensions for non-'1' indices
             if (any(cellfun(@(c)(~isequal(c, 1)), subs.subs(vbNonColon))))
                % - This is an error
-               error('MappedTensor:badsubscript', ...
-                  '*** MappedTensor: Index exceeds matrix dimensions.');
+               error('MappedTensor:InvalidRef', ...
+                  '*** MappedTensor: Subscript out of range.');
             end
             
             % - Permute index order
@@ -1551,8 +1564,7 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, h
       elseif (any(cRefs{nRefDim}(:) < 1) || any(cRefs{nRefDim}(:) > vnLims(nRefDim)))
          % - Check limits
          error('MappedTensor:InvalidRef', ...
-            '*** MappedTensor: Reference dimension [%d] was out of bounds [1..%d].', ...
-            nRefDim, vnLims(nRefDim));
+            '*** MappedTensor: Index exceeds matrix dimensions.');
          
       else
          % - This dimension was ok
