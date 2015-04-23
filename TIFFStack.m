@@ -82,6 +82,7 @@ classdef TIFFStack < handle
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
       fhReadFun;           % - When using Tiff class, function for reading data
       vnDimensionOrder;    % - Internal dimensions order to support permution
+      fhRepSum;            % - Function handle to (hopefully) accellerated repsum function
    end
    
    methods
@@ -108,6 +109,9 @@ classdef TIFFStack < handle
             warning('TIFFStack:SlowAccess', ...
                     '--- TIFFStack: Using slower non-TiffLib access.');
          end
+         
+         % - Get accelerated repsum function, if possible
+         oStack.fhRepSum = GetMexFunctionHandles;
          
          % - Check for inversion flag
          if (~exist('bInvert', 'var'))
@@ -281,15 +285,22 @@ classdef TIFFStack < handle
 %% --- Overloaded subsref
 
       function [tfData] = subsref(oStack, S)
+         % - Test for valid subscripts
+         cellfun(@isvalidsubscript, S.subs);
+
          switch S(1).type
             case '()'
+               % - Re-order reference indices
                nNumDims = numel(S.subs);
-%                nNumStackDims = numel(oStack.vnDataSize);
                nNumTotalDims = numel(oStack.vnDimensionOrder);
+               vnReferencedTensorSize = size(oStack);
+
+%                nNumDims = numel(S.subs);
+% %                nNumStackDims = numel(oStack.vnDataSize);
+%                nNumTotalDims = numel(oStack.vnDimensionOrder);
                
-               % - Inverse permute index order
-               vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-               
+               bLinearIndexing = false;
+
                % - Check dimensionality and trailing dimensions
                if (nNumDims == 1)
                   % - Translate colon indexing
@@ -306,34 +317,37 @@ classdef TIFFStack < handle
                         error('TIFFStack:InvalidRef', ...
                            '*** TIFFStack: Subscript out of range.');
                      end
-                     S.subs = cIndices(vnInvOrder);
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                     S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
                   end
+                  
+                  bLinearIndexing = true;
                   
                elseif (nNumDims < nNumTotalDims)
-                  if (iscolon(S.subs{end}))
-                     % - Pass out trailing colons
-                     [S.subs{nNumDims:nNumTotalDims}] = deal(':');
+                  % - Wrap up trailing dimensions, matlab style, using linear indexing
+                  vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
+                  vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
                   
-                  else
-                     % - Assume trailing references are wrapped up, matlab
-                     % style, so we have to compute "linear" indexing for
-                     % the trailing dimensions
-                     try
-                        [S.subs{nNumDims:nNumTotalDims}] = ind2sub(size(oStack, nNumDims:nNumTotalDims), S.subs{end});
-                     catch
-                        error('TIFFStack:InvalidRef', ...
-                           '*** TIFFStack: Subscript out of range.');
-                     end
-                  end
+                  % - Convert to linear indexing
+                  bLinearIndexing = true;
+                  [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
+                  S.subs = S.subs(1);
+                  [S.subs{1:nNumTotalDims}] = ind2sub(size(oStack), S.subs{1});
                   
-                  % - Permute index order
-                  S.subs = S.subs(vnInvOrder);
+                  % - Inverse permute index order
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  
+%                   if (numel(vnDataSize) == 1)
+%                      vnDataSize(2) = 1;
+%                   end
                   
                elseif (nNumDims == nNumTotalDims)
                   % - Simply permute and access tensor
                   
                   % - Permute index order
-                  S.subs = S.subs(vnInvOrder);
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                   
                else % (nNumDims > nNumTotalDims)
                   % - Check for non-colon references
@@ -353,29 +367,26 @@ classdef TIFFStack < handle
                   S.subs = S.subs(1:nNumTotalDims);
                   
                   % - Permute index order
-                  S.subs = S.subs(vnInvOrder);
-
-                  % - Permute index order
-                  S.subs = S.subs(vnInvOrder);
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
+                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                end
                
                % - Access stack (tifflib or tiffread)
                if (oStack.bUseTiffLib)
-                  tfData = TS_read_data_Tiff(oStack, S.subs, nNumDims == 1);
+                  tfData = TS_read_data_Tiff(oStack, S.subs, bLinearIndexing);
                else
-                  tfData = TS_read_data_tiffread(oStack, S.subs, nNumDims == 1);
+                  tfData = TS_read_data_tiffread(oStack, S.subs, bLinearIndexing);
                end
                
                % - Permute dimensions, if linear indexing has not been used
-               if (nNumDims > 1)
+               if (~bLinearIndexing)
                   tfData = permute(tfData, oStack.vnDimensionOrder);
                end
                
                % - Reshape return data to concatenate trailing dimensions (just as
                % matlab does)
                if (nNumDims > 1) && (nNumDims < nNumTotalDims)
-                  cnSize = num2cell(size(tfData));
-                  tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
+                  tfData = reshape(tfData, vnRetDataSize);
                end
                
             case '.'
@@ -389,8 +400,12 @@ classdef TIFFStack < handle
       
 %% --- Overloaded size, permute, ipermute, ctranspose, transpose
       function [varargout] = size(oStack, vnDimensions)
-         % - Return the size of the stack, permuted
-         vnSize = oStack.vnDataSize(oStack.vnDimensionOrder);
+         % - Get original tensor size, and extend dimensions if necessary
+         vnDataSize = oStack.vnDataSize; %#ok<PROP>
+         vnDataSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROP>
+         
+         % - Return the size of the tensor data element, permuted
+         vnSize = vnDataSize(oStack.vnDimensionOrder); %#ok<PROP>
          
          % - Find last non-unitary dimension and trim
          nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
@@ -591,7 +606,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    
    if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
       error('TIFFStack:badsubscript', ...
-            '*** TIFFStack: Index exceeds stack dimensions.');
+         '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
    % - Get referencing parameters for TIF object
@@ -686,6 +701,84 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
    end
 end
+
+% GetLinearIndicesForRefs - FUNCTION Convert a set of multi-dimensional indices directly into linear indices
+function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLims, hRepSumFunc)
+
+   % - Find colon references
+   vbIsColon = cellfun(@iscolon, cRefs);
+   
+   if (all(vbIsColon))
+      vnLinearIndices = 1:prod(vnLims);
+      vnDimRefSizes = vnLims;
+      return;
+   end
+   
+   nFirstNonColon = find(~vbIsColon, 1, 'first');
+   vbTrailingRefs = true(size(vbIsColon));
+   vbTrailingRefs(1:nFirstNonColon-1) = false;
+   vnDimRefSizes = cellfun(@numel, cRefs);
+   vnDimRefSizes(vbIsColon) = vnLims(vbIsColon);
+   
+   % - Calculate dimension offsets
+   vnDimOffsets = [1 cumprod(vnLims)];
+   vnDimOffsets = vnDimOffsets(1:end-1);
+
+   % - Remove trailing "1"s
+   vbOnes = cellfun(@(c)isequal(c, 1), cRefs);
+   nLastNonOne = find(~vbOnes, 1, 'last');
+   vbTrailingRefs((nLastNonOne+1):end) = false;
+
+   % - Work out how many linear indices there will be in total
+   nNumIndices = prod(vnDimRefSizes);
+   vnLinearIndices = zeros(nNumIndices, 1);
+   
+   % - Build a referencing window encompassing the leading colon refs (or
+   % first ref)
+   if (nFirstNonColon > 1)
+      vnLinearIndices(1:prod(vnLims(1:(nFirstNonColon-1)))) = 1:prod(vnLims(1:(nFirstNonColon-1)));
+   else
+      vnLinearIndices(1:vnDimRefSizes(1)) = cRefs{1};
+      vbTrailingRefs(1) = false;
+   end
+   
+   % - Replicate windows to make up linear indices
+   for (nDimension = find(vbTrailingRefs & ~vbOnes))
+      % - How long is the current window?
+      nCurrWindowLength = prod(vnDimRefSizes(1:(nDimension-1)));
+      nThisWindowLength = nCurrWindowLength * vnDimRefSizes(nDimension);
+      
+      % - Is this dimension a colon reference?
+      if (vbIsColon(nDimension))
+         vnLinearIndices(1:nThisWindowLength) = hRepSumFunc(vnLinearIndices(1:nCurrWindowLength), ((1:vnLims(nDimension))-1) * vnDimOffsets(nDimension));
+
+      else
+         vnLinearIndices(1:nThisWindowLength) = hRepSumFunc(vnLinearIndices(1:nCurrWindowLength), (cRefs{nDimension}-1) * vnDimOffsets(nDimension));
+      end
+   end
+end
+
+% mapped_tensor_repsum_nomex - FUNCTION Slow version of replicate and sum
+function [vfDest] = mapped_tensor_repsum_nomex(vfSourceA, vfSourceB)
+   [mfA, mfB] = meshgrid(vfSourceB, vfSourceA);
+   vfDest = mfA(:) + mfB(:);
+end
+
+% isvalidsubscript - FUNCTION Test whether a vector contains valid entries
+% for subscript referencing
+function isvalidsubscript(oRefs)
+   try
+      if (islogical(oRefs))
+         validateattributes(oRefs, {'logical'}, {'binary'});
+      else
+         validateattributes(oRefs, {'single', 'double'}, {'integer', 'real', 'positive'});
+      end
+   catch
+      error('TIFFStack:badsubscript', ...
+            '*** TIFFStack: Subscript indices must either be real positive integers or logicals.');
+   end
+end
+
 
 %% Accelerated Libtiff reading functions
 
@@ -926,3 +1019,35 @@ function bIsColon = iscolon(ref)
 end
 
 % --- END of TIFFStack.m ---
+
+%% -- MEX-handling functions
+
+function [hRepSumFunc] = GetMexFunctionHandles
+   % - Does the compiled MEX function exist?
+   if (exist('mapped_tensor_repsum') ~= 3) %#ok<EXIST>
+      try %#ok<TRYNC>
+         % - Move to the MappedTensor private directory
+         strMTDir = fileparts(which('TIFFStack'));
+         strCWD = cd(fullfile(strMTDir, 'private'));
+         
+         % - Try to compile the MEX functions
+         disp('--- MappedTensor: Compiling MEX functions.');
+         mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
+         
+         % - Move back to previous working directory
+         cd(strCWD);
+      end
+   end
+   
+   % - Did we succeed?
+   if (exist('mapped_tensor_repsum') == 3) %#ok<EXIST>
+      hRepSumFunc = @mapped_tensor_repsum;
+      
+   else
+      % - Just use the slow matlab version
+      warning('TIFFStack:MEXCompilation', ...
+         '--- TIFFStack: Could not compile MEX functions.  Using slow matlab versions.');
+      
+      hRepSumFunc = @mapped_tensor_repsum_nomex;
+   end
+end
