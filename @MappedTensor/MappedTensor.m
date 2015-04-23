@@ -353,7 +353,7 @@ classdef MappedTensor < handle
             nNumDims = nNumTotalDims;
             
             % - Translate colon indexing
-            if (isequal(subs.subs{1}, ':'))
+            if (iscolon(subs.subs{1}))
                subs.subs{1} = (1:numel(mtVar))';
             end
             
@@ -372,14 +372,20 @@ classdef MappedTensor < handle
             end
             
          elseif (nNumDims < nNumTotalDims)
-            % - Assume trailing dimensions are wraped up, matlab style, so
-            % we need to compute linear indexing for these trailing
-            % dimensions
-            try
-               [subs.subs{nNumDims:nNumTotalDims}] = ind2sub(size(mtVar, nNumDims:nNumTotalDims), subs.subs{end});
-            catch
-               error('MappedTensor:InvalidRef', ...
+            if (iscolon(subs.subs{end}))
+               % - Pass out trailing colons
+               [subs.subs{nNumDims:nNumTotalDims}] = deal(':');
+               
+            else
+               % - Assume trailing dimensions are wraped up, matlab style, so
+               % we need to compute linear indexing for these trailing
+               % dimensions
+               try
+                  [subs.subs{nNumDims:nNumTotalDims}] = ind2sub(size(mtVar, nNumDims:nNumTotalDims), subs.subs{end});
+               catch
+                  error('MappedTensor:InvalidRef', ...
                      '*** MappedTensor: Subscript out of range.');
+               end
             end
 
             % - Inverse permute index order
@@ -395,7 +401,7 @@ classdef MappedTensor < handle
             
          else % (nNumDims > nNumTotalDims)
             % - Check for non-colon references
-            vbNonColon = cellfun(@(c)(~isequal(c, ':')), subs.subs);
+            vbNonColon = ~cellfun(@iscolon, subs.subs);
             
             % - Check only trailing dimensions
             vbNonColon(1:nNumTotalDims) = false;
@@ -1435,6 +1441,11 @@ function [c,indA,indC] = unique_accel(a)
    
 end
 
+% iscolon - FUNCTION Test whether a reference is equal to ':'
+function bIsColon = iscolon(ref)
+   bIsColon = ischar(ref) && isequal(ref, ':');
+end
+
 %% Read / write functions
 
 % mt_read_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
@@ -1548,7 +1559,7 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, h
    % - Check each dimension in turn
    for (nRefDim = numel(cRefs):-1:1) %#ok<FORPF>
       % - Convert colon references
-      if (ischar(cRefs{nRefDim}) && isequal(cRefs{nRefDim}, ':'))
+      if (iscolon(cRefs{nRefDim}))
          cCheckedRefs{nRefDim} = ':';
          
       elseif (islogical(cRefs{nRefDim}))
@@ -1584,7 +1595,7 @@ end
 function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLims, hRepSumFunc)
 
    % - Find colon references
-   vbIsColon = cellfun(@(c)(ischar(c) && isequal(c, ':')), cRefs);
+   vbIsColon = cellfun(@iscolon, cRefs);
    
    if (all(vbIsColon))
       vnLinearIndices = 1:prod(vnLims);
