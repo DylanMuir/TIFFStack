@@ -285,11 +285,11 @@ classdef TIFFStack < handle
 %% --- Overloaded subsref
 
       function [tfData] = subsref(oStack, S)
-         % - Test for valid subscripts
-         cellfun(@isvalidsubscript, S.subs);
-
          switch S(1).type
             case '()'
+               % - Test for valid subscripts
+               cellfun(@isvalidsubscript, S.subs);
+               
                % - Re-order reference indices
                nNumDims = numel(S.subs);
                nNumTotalDims = numel(oStack.vnDimensionOrder);
