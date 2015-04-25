@@ -739,7 +739,7 @@ classdef MappedTensor < handle
             strComplex = '';
          end
          
-         disp(sprintf('  <a href="matlab:help MappedTensor">MappedTensor</a> class, containing: %s%s [%s].', strComplex, mtVar.strClass, strSize)); %#ok<DSPS>
+         disp(sprintf('  <a href="matlab:help MappedTensor">MappedTensor</a> object, containing: %s%s [%s].', strComplex, mtVar.strClass, strSize)); %#ok<DSPS>
          disp('  <a href="matlab:methods(''MappedTensor'')">Methods</a>');
          fprintf(1, '\n');
       end
