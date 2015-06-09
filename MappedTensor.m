@@ -922,6 +922,65 @@ classdef MappedTensor < handle
       
       %% SliceFunction - METHOD Execute a function on the entire tensor, in slices
       function [mtNewVar] = SliceFunction(mtVar, fhFunction, nSliceDim, vnSliceSize, varargin)
+         % SliceFunction - METHOD Execute a function on the entire tensor, in slices
+         %
+         % Usage: [<mtNewVar>] = SliceFunction(mtVar,
+         %           fhFunctionHandle, nSliceDim <, vnSliceSize,> ...)
+         %
+         % 'mtVar' is a MappedTensor.  This tensor will be sliced up along
+         % dimensions 'nSliceDim', with each slice passed individually to
+         % 'fhFunctionHandle', along with the slice index and any trailing
+         % argments (...).  If no return argument is supplied, the results
+         % will be stored back in 'mtVar'.  If a return argument is
+         % supplied, a new MappedTensor will be created to contain the
+         % results.  The optional argument 'vnSliceSize' can be used to
+         % call a function that returns a different sized output than the
+         % size of a single slice of 'mtVar'. In that case, a new tensorsl
+         % 'mtNewVar' will be generated, and it will have the size
+         % 'vnSliceSize', with the dimension 'nSliceDim' having the same
+         % length as in the original tensor 'mtVar'.
+         %
+         % "Slice assign" operations can be performed by passing in a
+         % function that takes no input arguments for 'fhFunctionHandle'.
+         %
+         % Note that due to Matlab not making available the number of
+         % return arguments that an anonymous function delivers, all
+         % functions passed to SliceFunction must return AT LEAST ONE
+         % argument.
+         %
+         % For example:
+         %
+         %    mtVar(:) = abs(fft2(mtVar(:, :, :)));
+         %
+         % is equivalent to
+         %
+         %    SliceFunction(mtVar, @(x)(abs(fft2(x)), 3);
+         %
+         % Each slice of the third dimension of mtVar, taken in turn, is
+         % passed to fft2 and the result stored back into the same slice of
+         % mtVar.
+         %
+         %    mtVar2 = SliceFunction(mtVar, @(x)(fft2(x)), 3);
+         %
+         % This will return the result in a new MappedTensor, with
+         % temporary storage.
+         %
+         %    mtVar2 = SliceFunction(mtVar, @(x)(sum(x)), 3, [1 10 1]);
+         %
+         % This will create a new MappedTensor with size [1 10 N], where
+         % 'N' is the length along dimension 3 of 'mtVar'.
+         %
+         %    SliceFunction(mtVar, @()(randn(10, 10)), 3);
+         %
+         % This will assign random numbers to each slice of 'mtVar'
+         % independently.
+         %
+         %    SliceFunction(mtVar, @(x, n)(x .* vfFactor(n)), 3);
+         %
+         % The second argument to the function is passed the index of the
+         % current slice.  This line will multiply each slice in mtVar by a
+         % scalar corresponding to that slice index.
+
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
