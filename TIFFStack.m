@@ -295,10 +295,6 @@ classdef TIFFStack < handle
                nNumTotalDims = numel(oStack.vnDimensionOrder);
                vnReferencedTensorSize = size(oStack);
 
-%                nNumDims = numel(S.subs);
-% %                nNumStackDims = numel(oStack.vnDataSize);
-%                nNumTotalDims = numel(oStack.vnDimensionOrder);
-               
                bLinearIndexing = false;
 
                % - Check dimensionality and trailing dimensions
@@ -337,11 +333,7 @@ classdef TIFFStack < handle
                   % - Inverse permute index order
                   vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
-                  
-%                   if (numel(vnDataSize) == 1)
-%                      vnDataSize(2) = 1;
-%                   end
-                  
+                                    
                elseif (nNumDims == nNumTotalDims)
                   % - Simply permute and access tensor
                   
@@ -371,6 +363,12 @@ classdef TIFFStack < handle
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                end
                
+               % - Catch empty return data
+               if (prod(vnRetDataSize) == 0)
+                  tfData = zeros(vnRetDataSize);
+                  return;
+               end
+               
                % - Access stack (tifflib or tiffread)
                if (oStack.bUseTiffLib)
                   tfData = TS_read_data_Tiff(oStack, S.subs, bLinearIndexing);
@@ -398,7 +396,11 @@ classdef TIFFStack < handle
          end
       end
       
-%% --- Overloaded size, permute, ipermute, ctranspose, transpose
+%% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose
+      function [n] = numel(oStack)
+         n = prod(size(oStack)); %#ok<PSIZE>
+      end
+
       function [varargout] = size(oStack, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
          vnDataSize = oStack.vnDataSize; %#ok<PROP>
