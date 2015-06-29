@@ -302,7 +302,9 @@ classdef TIFFStack < handle
                   % - Translate colon indexing
                   if (iscolon(S.subs{1}))
                      S.subs = num2cell(repmat(':', 1, nNumTotalDims));
-                     nNumDims = 4;
+                     vnRetDataSize = [prod(vnReferencedTensorSize), 1];
+                     
+                     bLinearIndexing = false;
 
                   else
                      % - Get equivalent subscripted indexes and permute
@@ -315,9 +317,11 @@ classdef TIFFStack < handle
                      end
                      vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
+                     vnRetDataSize = [numel(S.subs{1}) 1];
+
+                     bLinearIndexing = true;
                   end
                   
-                  bLinearIndexing = true;
                   
                elseif (nNumDims < nNumTotalDims)
                   % - Wrap up trailing dimensions, matlab style, using linear indexing
@@ -335,7 +339,10 @@ classdef TIFFStack < handle
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                                     
                elseif (nNumDims == nNumTotalDims)
-                  % - Simply permute and access tensor
+                  % - Check for colon references
+                  vbIsColon = cellfun(@iscolon, S.subs);
+                  vnRetDataSize = cellfun(@numel, S.subs);                  
+                  vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
                   vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
@@ -343,27 +350,42 @@ classdef TIFFStack < handle
                   
                else % (nNumDims > nNumTotalDims)
                   % - Check for non-colon references
-                  vbNonColon = ~cellfun(@iscolon, S.subs);
+                  vbIsColon = cellfun(@iscolon, S.subs);
+                  
+                  % - Check for non-unitary references
+                  vbIsUnitary = cellfun(@(c)(isequal(c, 1)), S.subs);
+                  
+                  % - Check for non-empty references
+                  vbIsEmpty = cellfun(@isempty, S.subs);
                   
                   % - Check only trailing dimensions
-                  vbNonColon(1:nNumTotalDims) = false;
+                  vbTrailing = [false(1, nNumTotalDims) true(1, nNumDims-nNumTotalDims)];
                   
-                  % - Check trailing dimensions for non-'1' indices
-                  if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
+                  % - Check trailing dimensions for inappropriate indices
+                  if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
                      % - This is an error
                      error('TIFFStack:badsubscript', ...
                         '*** TIFFStack: Index exceeds stack dimensions.');
                   end
                   
-                  % - Only keep relevant dimensions
-                  S.subs = S.subs(1:nNumTotalDims);
+                  % - Catch empty refs
+                  if (~any(vbIsEmpty))
+                     % - Only keep relevant dimensions
+                     S.subs = S.subs(1:nNumTotalDims);
+                  end
+                  
+                  vnReferencedTensorSize(nNumTotalDims+1:nNumDims) = 1;
+                  vnReferencedTensorSize(vnReferencedTensorSize == 0) = 1;
+                  vbIsColon = cellfun(@iscolon, S.subs);
+                  vnRetDataSize = cellfun(@numel, S.subs);
+                  vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                end
                
-               % - Catch empty return data
+               % - Catch empty refs
                if (prod(vnRetDataSize) == 0)
                   tfData = zeros(vnRetDataSize);
                   return;
@@ -383,7 +405,7 @@ classdef TIFFStack < handle
                
                % - Reshape return data to concatenate trailing dimensions (just as
                % matlab does)
-               if (nNumDims > 1) && (nNumDims < nNumTotalDims)
+               if (~isequal(size(tfData), vnRetDataSize))
                   tfData = reshape(tfData, vnRetDataSize);
                end
                
