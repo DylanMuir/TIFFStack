@@ -282,6 +282,16 @@ classdef TIFFStack < handle
          end
       end
 
+      % diagnostic - METHOD Display some diagnostics about a stack
+      function diagnostic(oStack)
+         disp(oStack);
+         fprintf('<strong>Private properties:</strong>\n');
+         fprintf('   bUseTiffLib: %d\n', oStack.bUseTiffLib);
+         fprintf('   fhReadFun: %s\n', func2str(oStack.fhReadFun));
+         fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
+         fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
+      end
+      
 %% --- Overloaded subsref
 
       function [tfData] = subsref(oStack, S)
@@ -1064,7 +1074,7 @@ function [hRepSumFunc] = GetMexFunctionHandles
          strCWD = cd(fullfile(strMTDir, 'private'));
          
          % - Try to compile the MEX functions
-         disp('--- MappedTensor: Compiling MEX functions.');
+         disp('--- TIFFStack: Compiling MEX functions.');
          mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
          
          % - Move back to previous working directory
