@@ -718,7 +718,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       vnFrameLinearIndices = sub2ind(vnBlockSize([1 2 4]), cIndices{1}, cIndices{2}, cIndices{4});
       
       % - Loop over images in stack and extract required frames
-%       try
+      try
          for (nImage = unique(cIndices{3})')
             % - Find corresponding pixels
             vbThesePixels = cIndices{3} == nImage;
@@ -730,13 +730,13 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
             [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, vnFrameLinearIndices(vbThesePixels));
          end
          
-%       catch mErr
-%          % - Record error state
-%          base_ME = MException('TIFFStack:ReadError', ...
-%             '*** TIFFStack: Could not read data from image file.');
-%          new_ME = addCause(base_ME, mErr);
-%          throw(new_ME);
-%       end
+      catch mErr
+         % - Record error state
+         base_ME = MException('TIFFStack:ReadError', ...
+            '*** TIFFStack: Could not read data from image file.');
+         new_ME = addCause(base_ME, mErr);
+         throw(new_ME);
+      end
    end
    
    % - Invert data if requested
