@@ -18,8 +18,7 @@ the Matlab `Tiff` class. If `libTiff` is not available, then Matlab-only
 code is used to read image data. `permute`, `ipermute`, `transpose` and
 `ctranspose` are also transparently supported.
 
-Download and install
-====================
+## Download and install
 
 [Download `TIFFStack`]
 
@@ -28,8 +27,7 @@ Download and install
 to [Matlab] that `TIFFStack` is an object-oriented module. Add the parent
 directory &mdash; not the *@TIFFStack* directory &mdash; to the [Matlab] path.
 
-Usage
-=====
+## Usage
 
     tsStack = TIFFStack(strFilename <, bInvert>)
 
@@ -43,8 +41,7 @@ If not, it uses a modified version of `tiffread` \[1, 2\] to read data.
 Code is included (but disabled) to use the matlab imread function, but
 this function returns invalid data for some TIFF formats.
 
-Construction of a `TIFFStack` object
-====================================
+## Construction of a `TIFFStack` object
 
     >> tsStack = TIFFStack('test.tiff'); % Construct a TIFF stack associated with a file
 
@@ -57,8 +54,7 @@ Construction of a `TIFFStack` object
             sImageInfo: [5x1 struct] 
             strDataClass: 'uint16'
 
-Accessing data
-==============
+## Accessing data
 
     >> tsStack(:, :, 3); % Retrieve the 3rd frame of the stack, all planes 
     >> tsStack(:, :, 1, 3); % Retrieve the 3rd plane of the 1st frame 
@@ -70,8 +66,7 @@ Accessing data
     >> tsStack(4); % Linear indexing is supported 
     >> tsStack.bInvert = true; % Turn on data inversion
 
-Publications
-============
+## Publications
 
 This work was published in [Frontiers in Neuroinformatics]: DR Muir and
 BM Kampa. 2015. *[FocusStack and StimServer: A new open source MATLAB
@@ -79,16 +74,14 @@ toolchain for visual stimulation and analysis of two-photon calcium
 neuronal imaging data](http://dx.doi.org/10.3389/fninf.2014.00085)*, **Frontiers in Neuroinformatics** 8 *85*. DOI: [dx.doi.org/10.3389/fninf.2014.00085](http://dx.doi.org/10.3389/fninf.2014.00085).
 Please cite our publication in lieu of thanks, if you use this code.
 
-References
-==========
+## References
 
 \[1\] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review
 Letters 86: 3192-3195; 2001. DOI: [10.1103/PhysRevLett.86.3192]
 
 \[2\] <http://www.embl.de/~nedelec/>
 
-Acknowledgements
-================
+## Acknowledgements
 
 This work uses `tiffread2` from [Francois Nedelec] to access the data in
 the TIFF file. [Matlab] includes the ability to read TIFF files in
