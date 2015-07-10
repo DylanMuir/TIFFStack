@@ -315,6 +315,13 @@ classdef TIFFStack < handle
                vnReferencedTensorSize = size(oStack);
 
                bLinearIndexing = false;
+               
+               % - Convert logical indexing to indices
+               for (nDim = 1:numel(S.subs))
+                  if (islogical(S.subs{nDim}))
+                     S.subs{nDim} = find(S.subs{nDim});
+                  end
+               end
 
                % - Check dimensionality and trailing dimensions
                if (nNumDims == 1)
