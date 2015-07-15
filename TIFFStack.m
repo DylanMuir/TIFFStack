@@ -73,6 +73,7 @@ classdef TIFFStack < handle
       strFilename = [];    % - The name of the TIFF file on disk
       sImageInfo;          % - The TIFF header information
       strDataClass;        % - The matlab class in which data will be returned
+      fhCastFunction;      % - The matlab function that casts data to the required return class
    end
    
    properties (SetAccess = private, GetAccess = private)
@@ -152,7 +153,7 @@ classdef TIFFStack < handle
                      switch (sInfo(1).BitsPerSample(1))
                         case 1
                            oStack.strDataClass = 'logical';
-                           
+
                         case 8
                            oStack.strDataClass = 'uint8';
                            
@@ -209,6 +210,9 @@ classdef TIFFStack < handle
                      error('TIFFStack:UnsupportedFormat', ...
                            '*** TIFFStack: The sample format of this TIFF stack is not supported.');
                end
+               
+               % -- Assign casting function
+               oStack.fhCastFunction = str2func(oStack.strDataClass);
                
                % -- Assign accelerated reading function
                strReadFun = 'TS_read_Tiff';
@@ -624,7 +628,7 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
       
    % - Invert data if requested
    if (oStack.bInvert)
-      tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
+      tfData = oStack.fhCastFunction(oStack.sImageInfo(1).MaxSampleValue) - (tfData - oStack.fhCastFunction(oStack.sImageInfo(1).MinSampleValue));
    end
 end
 
