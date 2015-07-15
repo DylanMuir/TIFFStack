@@ -85,7 +85,6 @@ classdef TIFFStack < handle
       strFilename = [];    % - The name of the TIFF file on disk
       sImageInfo;          % - The TIFF header information
       strDataClass;        % - The matlab class in which data will be returned
-      fhCastFunction;      % - The matlab function that casts data to the required return class
    end
    
    properties (SetAccess = private, GetAccess = private)
@@ -96,6 +95,7 @@ classdef TIFFStack < handle
       fhReadFun;           % - When using Tiff class, function for reading data
       vnDimensionOrder;    % - Internal dimensions order to support permution
       fhRepSum;            % - Function handle to (hopefully) accellerated repsum function
+      fhCastFunction;      % - The matlab function that casts data to the required return class
    end
    
    methods
