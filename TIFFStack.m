@@ -93,9 +93,10 @@ classdef TIFFStack < handle
       HEADER;              % /
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
       fhReadFun;           % - When using Tiff class, function for reading data
+      fhSetDirFun;         % - When using Tiff class, function for setting the directory
       vnDimensionOrder;    % - Internal dimensions order to support permution
       fhRepSum;            % - Function handle to (hopefully) accellerated repsum function
-      fhCastFunction;      % - The matlab function that casts data to the required return class
+      fhCastFun;           % - The matlab function that casts data to the required return class
    end
    
    methods
@@ -224,7 +225,7 @@ classdef TIFFStack < handle
                end
                
                % -- Assign casting function
-               oStack.fhCastFunction = str2func(oStack.strDataClass);
+               oStack.fhCastFun = str2func(oStack.strDataClass);
                
                % -- Assign accelerated reading function
                strReadFun = 'TS_read_Tiff';
@@ -246,15 +247,19 @@ classdef TIFFStack < handle
                         '*** TIFFStack: The planar configuration of this TIFF stack is not supported.');
                end
                
+               strSetDirFun = 'TS_set_directory';
+               
                % - Check for zero-based referencing
                try
                    tifflib('computeStrip', oStack.TIF, 0);
                catch
                   strReadFun = [strReadFun '_pre2014'];
+                  strSetDirFun = [strSetDirFun '_pre2014'];
                end
                
-               % - Convert into function handle
+               % - Convert into function handles
                oStack.fhReadFun = str2func(strReadFun);
+               oStack.fhSetDirFun = str2func(strSetDirFun);
                
                % - Fix up rows per strip (inconsistency between Windows and
                % OS X Tifflib
@@ -640,7 +645,7 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
       
    % - Invert data if requested
    if (oStack.bInvert)
-      tfData = oStack.fhCastFunction(oStack.sImageInfo(1).MaxSampleValue) - (tfData - oStack.fhCastFunction(oStack.sImageInfo(1).MinSampleValue));
+      tfData = oStack.fhCastFun(oStack.sImageInfo(1).MaxSampleValue) - (tfData - oStack.fhCastFun(oStack.sImageInfo(1).MinSampleValue));
    end
 end
 
@@ -704,7 +709,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
          % - Loop over images in stack
          for (nImage = 1:numel(cIndices{3}))
             % - Skip to this image in stack
-            tifflib('setDirectory', tlStack, cIndices{3}(nImage)-1);
+            oStack.fhSetDirFun(tlStack, cIndices{3}(nImage));
             
             % - Read data from this image, overwriting frame buffer
             [~, tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, []);
@@ -747,7 +752,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
             vbThesePixels = cIndices{3} == nImage;
             
             % - Skip to this image in stack
-            tifflib('setDirectory', tlStack, nImage-1);
+            oStack.fhSetDirFun(tlStack, nImage);
 
             % - Read the subsampled pixels from the stack
             [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, vnFrameLinearIndices(vbThesePixels));
@@ -935,6 +940,11 @@ function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_chunky(tfImageBuff
    end
 end
 
+% TS_set_direcotry - FUNCTION Set the current TIFF directory
+function TS_set_directory(tlStack, nDirectory) %#ok<DEFNU>
+   tifflib('setDirectory', tlStack, nDirectory-1);
+end
+
 %% Pre-2014 matlab Tifflib reading functions
 
 % TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
@@ -1014,6 +1024,12 @@ function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_chunky_pre2014(tfI
       vfOutputPixels = tfImageBuffer;
    end
 end
+
+% TS_set_direcotry - FUNCTION Set the current TIFF directory
+function TS_set_directory_pre2014(tlStack, nDirectory) %#ok<DEFNU>
+   tifflib('setDirectory', tlStack, nDirectory);
+end
+
 
 %% Accelerated TiffgetTag function
 
