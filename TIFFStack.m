@@ -22,6 +22,18 @@
 % permute, ipermute and transpose are now transparantly supported. Note
 % that to read a pixel, the entire frame containing that pixel is read. So
 % reading a Z-slice of the stack will read in the entire stack.
+%
+% Some TIFF file writing software introduces custom or poorly-formed tags.
+% This causes tifflib to produce lots of warnings. These warnings can be
+% ignored by setting:
+%
+% >> w = warning('off', 'MATLAB:imagesci:tiffmexutils:libtiffWarning');
+%
+% and later restored with:
+%
+% >> warning(w);
+%
+% -------------------------------------------------------------------------
 % 
 % Construction:
 % 
