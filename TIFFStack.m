@@ -89,7 +89,7 @@ classdef TIFFStack < handle
    
    properties (SetAccess = private, GetAccess = private)
       vnDataSize;          % - Cached size of the TIFF stack
-      TIF;                 % \_ Cached header infor for tiffread29 speedups
+      TIF;                 % \_ Cached header info for tiffread29 speedups
       HEADER;              % /
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
       fhReadFun;           % - When using Tiff class, function for reading data
@@ -300,7 +300,7 @@ classdef TIFFStack < handle
       function delete(oStack)
          if (oStack.bUseTiffLib)
             % - Close the TIFF file, if opened by TiffLib
-            if (isfield(oStack, 'TIF') && ~isempty(oStack.TIF))
+            if (~isempty(oStack.TIF))
                tifflib('close', oStack.TIF);
             end
 
