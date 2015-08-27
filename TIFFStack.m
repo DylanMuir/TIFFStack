@@ -28,6 +28,7 @@
 % ignored by setting:
 %
 % >> w = warning('off', 'MATLAB:imagesci:tiffmexutils:libtiffWarning');
+% >> warning('off', 'MATLAB:imagesci:tifftagsread:expectedTagDataFormat');
 %
 % and later restored with:
 %
@@ -346,12 +347,10 @@ classdef TIFFStack < handle
 
                % - Check dimensionality and trailing dimensions
                if (nNumDims == 1)
-                  % - Translate colon indexing
+                  % - Catch "read whole stack" case
                   if (iscolon(S.subs{1}))
                      S.subs = num2cell(repmat(':', 1, nNumTotalDims));
                      vnRetDataSize = [prod(vnReferencedTensorSize), 1];
-                     
-                     bLinearIndexing = false;
 
                   else
                      % - Get equivalent subscripted indexes and permute
@@ -375,15 +374,22 @@ classdef TIFFStack < handle
                   vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
                   vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
                   
-                  % - Convert to linear indexing
-                  bLinearIndexing = true;
-                  [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
-                  S.subs = S.subs(1);
-                  [S.subs{1:nNumTotalDims}] = ind2sub(size(oStack), S.subs{1});
-                  
-                  % - Inverse permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  % - Catch "read whole stack" case
+                  if (all(cellfun(@iscolon, S.subs)))
+                     [S.subs{nNumDims+1:nNumTotalDims}] = deal(':');
+                     vnRetDataSize = vnReferencedTensorSize;
+
+                  else
+                     % - Convert to linear indexing
+                     bLinearIndexing = true;
+                     [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
+                     S.subs = S.subs(1);
+                     [S.subs{1:nNumTotalDims}] = ind2sub(size(oStack), S.subs{1});
+
+                     % - Inverse permute index order
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                     S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  end
                                     
                elseif (nNumDims == nNumTotalDims)
                   % - Check for colon references
