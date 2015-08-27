@@ -331,10 +331,14 @@ classdef TIFFStack < handle
                % - Test for valid subscripts
                cellfun(@isvalidsubscript, S.subs);
                
-               % - Re-order reference indices
+               % - Record stack size
                nNumDims = numel(S.subs);
                nNumTotalDims = numel(oStack.vnDimensionOrder);
                vnReferencedTensorSize = size(oStack);
+               
+               if (numel(vnReferencedTensorSize) < nNumTotalDims)
+                  vnReferencedTensorSize(end+1:nNumTotalDims) = 1;
+               end
 
                bLinearIndexing = false;
                
