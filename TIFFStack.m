@@ -367,7 +367,7 @@ classdef TIFFStack < handle
                      end
                      vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
-                     vnRetDataSize = [numel(S.subs{1}) 1];
+                     vnRetDataSize = size(S.subs{1});
 
                      bLinearIndexing = true;
                   end
@@ -682,8 +682,8 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
    
    % - Check ranges
-   vnMinRange = cellfun(@(c)(min(c)), cIndices);
-   vnMaxRange = cellfun(@(c)(max(c)), cIndices);
+   vnMinRange = cellfun(@(c)(min(c(:))), cIndices);
+   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices);
    
    if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
       error('TIFFStack:badsubscript', ...
@@ -744,7 +744,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       % -- Linear indexing
       
       % - Allocate return vector
-      tfData = zeros(numel(cIndices{1}), 1, oStack.strDataClass);
+      tfData = zeros(size(cIndices{1}), oStack.strDataClass);
       
       % - Allocate single-frame buffer
       vnBlockSize = oStack.vnDataSize(1:2);
@@ -757,7 +757,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       
       % - Loop over images in stack and extract required frames
       try
-         for (nImage = unique(cIndices{3})')
+         for (nImage = unique(cIndices{3}(:))')
             % - Find corresponding pixels
             vbThesePixels = cIndices{3} == nImage;
             
