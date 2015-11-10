@@ -334,12 +334,10 @@ classdef TIFFStack < handle
                % - Record stack size
                nNumDims = numel(S.subs);
                nNumTotalDims = numel(oStack.vnDimensionOrder);
-               vnReferencedTensorSize = size(oStack);
                
-               if (numel(vnReferencedTensorSize) < nNumTotalDims)
-                  vnReferencedTensorSize(end+1:nNumTotalDims) = 1;
-               end
-
+               vnReferencedTensorSize = size(oStack);
+               nNumNZDims = numel(vnReferencedTensorSize);
+               
                bLinearIndexing = false;
                
                % - Convert logical indexing to indices
@@ -353,7 +351,7 @@ classdef TIFFStack < handle
                if (nNumDims == 1)
                   % - Catch "read whole stack" case
                   if (iscolon(S.subs{1}))
-                     S.subs = num2cell(repmat(':', 1, nNumTotalDims));
+                     S.subs = num2cell(repmat(':', 1, nNumNZDims));
                      vnRetDataSize = [prod(vnReferencedTensorSize), 1];
 
                   else
@@ -373,14 +371,14 @@ classdef TIFFStack < handle
                   end
                   
                   
-               elseif (nNumDims < nNumTotalDims)
+               elseif (nNumDims < nNumNZDims)
                   % - Wrap up trailing dimensions, matlab style, using linear indexing
                   vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
                   vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
                   
                   % - Catch "read whole stack" case
                   if (all(cellfun(@iscolon, S.subs)))
-                     [S.subs{nNumDims+1:nNumTotalDims}] = deal(':');
+                     [S.subs{nNumDims+1:nNumNZDims}] = deal(':');
                      vnRetDataSize = vnReferencedTensorSize;
 
                   else
@@ -388,21 +386,21 @@ classdef TIFFStack < handle
                      bLinearIndexing = true;
                      [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
                      S.subs = S.subs(1);
-                     [S.subs{1:nNumTotalDims}] = ind2sub(size(oStack), S.subs{1});
+                     [S.subs{1:nNumNZDims}] = ind2sub(size(oStack), S.subs{1});
 
                      % - Inverse permute index order
-                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumNZDims)) = 1:nNumNZDims;
                      S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                   end
                                     
-               elseif (nNumDims == nNumTotalDims)
+               elseif (nNumDims == nNumNZDims)
                   % - Check for colon references
                   vbIsColon = cellfun(@iscolon, S.subs);
                   vnRetDataSize = cellfun(@numel, S.subs);                  
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZDims)) = 1:nNumNZDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                   
                else % (nNumDims > nNumTotalDims)
@@ -416,7 +414,7 @@ classdef TIFFStack < handle
                   vbIsEmpty = cellfun(@isempty, S.subs);
                   
                   % - Check only trailing dimensions
-                  vbTrailing = [false(1, nNumTotalDims) true(1, nNumDims-nNumTotalDims)];
+                  vbTrailing = [false(1, nNumNZDims) true(1, nNumDims-nNumNZDims)];
                   
                   % - Check trailing dimensions for inappropriate indices
                   if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
@@ -428,17 +426,17 @@ classdef TIFFStack < handle
                   % - Catch empty refs
                   if (~any(vbIsEmpty))
                      % - Only keep relevant dimensions
-                     S.subs = S.subs(1:nNumTotalDims);
+                     S.subs = S.subs(1:nNumNZDims);
                   end
                   
-                  vnReferencedTensorSize(nNumTotalDims+1:nNumDims) = 1;
+                  vnReferencedTensorSize(nNumNZDims+1:nNumDims) = 1;
                   vnReferencedTensorSize(vnReferencedTensorSize == 0) = 1;
                   vbIsColon = cellfun(@iscolon, S.subs);
                   vnRetDataSize = cellfun(@numel, S.subs);
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZDims)) = 1:nNumNZDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                end
                
@@ -678,14 +676,14 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    end
 
    % - Fix up subsample detection for unitary dimensions
-   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices);
-   vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
+   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices(~vbIsColon));
+   vbIsColon(~vbIsColon) = vbIsOne & (oStack.vnDataSize(~vbIsColon) == 1);
    
    % - Check ranges
-   vnMinRange = cellfun(@(c)(min(c(:))), cIndices);
-   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices);
+   vnMinRange = cellfun(@(c)(min(c(:))), cIndices(~vbIsColon));
+   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
    
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
       error('TIFFStack:badsubscript', ...
          '*** TIFFStack: Index exceeds stack dimensions.');
    end
@@ -713,7 +711,8 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       tfData = zeros(vnOutputSize, oStack.strDataClass);
       
       % - Do we need to resample the data block?
-      bResample = any(~vbIsColon([1 2 4]));
+      vbTest = [true true false true];
+      bResample = any(vbTest(~vbIsColon));
 
       try
          % - Loop over images in stack
