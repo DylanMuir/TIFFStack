@@ -332,11 +332,15 @@ classdef TIFFStack < handle
                cellfun(@isvalidsubscript, S.subs);
                
                % - Record stack size
-               nNumDims = numel(S.subs);
-               nNumTotalDims = numel(oStack.vnDimensionOrder);
+               nNumRefDims = numel(S.subs);
                
                vnReferencedTensorSize = size(oStack);
-               nNumNZDims = numel(vnReferencedTensorSize);
+               nNumNZStackDims = numel(vnReferencedTensorSize);
+               nNumTotalStackDims = max(numel(oStack.vnDimensionOrder), nNumNZStackDims);
+               
+               vnFullTensorSize = vnReferencedTensorSize;
+               vnFullTensorSize(nNumNZStackDims+1:nNumTotalStackDims) = 1;
+               vnFullTensorSize(vnFullTensorSize == 0) = 1;
                
                bLinearIndexing = false;
                
@@ -348,22 +352,22 @@ classdef TIFFStack < handle
                end
 
                % - Check dimensionality and trailing dimensions
-               if (nNumDims == 1)
+               if (nNumRefDims == 1)
                   % - Catch "read whole stack" case
                   if (iscolon(S.subs{1}))
-                     S.subs = num2cell(repmat(':', 1, nNumNZDims));
+                     S.subs = num2cell(repmat(':', 1, nNumNZStackDims));
                      vnRetDataSize = [prod(vnReferencedTensorSize), 1];
 
                   else
                      % - Get equivalent subscripted indexes and permute
                      vnTensorSize = size(oStack);
                      try
-                        [cIndices{1:nNumTotalDims}] = ind2sub(vnTensorSize, S.subs{1});
+                        [cIndices{1:nNumTotalStackDims}] = ind2sub(vnTensorSize, S.subs{1});
                      catch
                         error('TIFFStack:InvalidRef', ...
                            '*** TIFFStack: Subscript out of range.');
                      end
-                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
                      vnRetDataSize = size(S.subs{1});
 
@@ -371,14 +375,14 @@ classdef TIFFStack < handle
                   end
                   
                   
-               elseif (nNumDims < nNumNZDims)
+               elseif (nNumRefDims < nNumNZStackDims)
                   % - Wrap up trailing dimensions, matlab style, using linear indexing
-                  vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
-                  vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
+                  vnReferencedTensorSize(nNumRefDims) = prod(vnReferencedTensorSize(nNumRefDims:end));
+                  vnReferencedTensorSize = vnReferencedTensorSize(1:nNumRefDims);
                   
                   % - Catch "read whole stack" case
                   if (all(cellfun(@iscolon, S.subs)))
-                     [S.subs{nNumDims+1:nNumNZDims}] = deal(':');
+                     [S.subs{nNumRefDims+1:nNumTotalStackDims}] = deal(':');
                      vnRetDataSize = vnReferencedTensorSize;
 
                   else
@@ -386,24 +390,25 @@ classdef TIFFStack < handle
                      bLinearIndexing = true;
                      [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
                      S.subs = S.subs(1);
-                     [S.subs{1:nNumNZDims}] = ind2sub(size(oStack), S.subs{1});
+                     [S.subs{1:nNumTotalStackDims}] = ind2sub(vnFullTensorSize, S.subs{1});
 
                      % - Inverse permute index order
-                     vnInvOrder(oStack.vnDimensionOrder(1:nNumNZDims)) = 1:nNumNZDims;
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                      S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                   end
                                     
-               elseif (nNumDims == nNumNZDims)
+               elseif (nNumRefDims == nNumNZStackDims)
                   % - Check for colon references
                   vbIsColon = cellfun(@iscolon, S.subs);
                   vnRetDataSize = cellfun(@numel, S.subs);                  
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZDims)) = 1:nNumNZDims;
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZStackDims)) = 1:nNumNZStackDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  S.subs(nNumNZStackDims+1:nNumTotalStackDims) = {1};
                   
-               else % (nNumDims > nNumTotalDims)
+               else % (nNumRefDims > nNumNZStackDims)
                   % - Check for non-colon references
                   vbIsColon = cellfun(@iscolon, S.subs);
                   
@@ -414,7 +419,7 @@ classdef TIFFStack < handle
                   vbIsEmpty = cellfun(@isempty, S.subs);
                   
                   % - Check only trailing dimensions
-                  vbTrailing = [false(1, nNumNZDims) true(1, nNumDims-nNumNZDims)];
+                  vbTrailing = [false(1, nNumNZStackDims) true(1, nNumRefDims-nNumNZStackDims)];
                   
                   % - Check trailing dimensions for inappropriate indices
                   if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
@@ -426,17 +431,18 @@ classdef TIFFStack < handle
                   % - Catch empty refs
                   if (~any(vbIsEmpty))
                      % - Only keep relevant dimensions
-                     S.subs = S.subs(1:nNumNZDims);
+                     S.subs = S.subs(1:nNumNZStackDims);
                   end
                   
-                  vnReferencedTensorSize(nNumNZDims+1:nNumDims) = 1;
+                  vnReferencedTensorSize(nNumNZStackDims+1:nNumRefDims) = 1;
                   vnReferencedTensorSize(vnReferencedTensorSize == 0) = 1;
                   vbIsColon = cellfun(@iscolon, S.subs);
                   vnRetDataSize = cellfun(@numel, S.subs);
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZDims)) = 1:nNumNZDims;
+                  S.subs(nNumNZStackDims+1:nNumTotalStackDims) = {1};
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                end
                
@@ -486,10 +492,13 @@ classdef TIFFStack < handle
          % - Return the size of the tensor data element, permuted
          vnSize = vnDataSize(oStack.vnDimensionOrder); %#ok<PROP>
          
-         % - Find last non-unitary dimension and trim
-         nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
-         if (nLastNonUnitary < numel(vnSize))
-            vnSize = vnSize(1:nLastNonUnitary);
+         % - Trim trailing unitary dimensions
+         vbIsUnitary = vnSize == 1;
+         if (vbIsUnitary(end))
+            nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
+            if (nLastNonUnitary < numel(vnSize))
+               vnSize = vnSize(1:nLastNonUnitary);
+            end
          end
          
          % - Return specific dimension(s)
