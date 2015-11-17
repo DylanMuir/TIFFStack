@@ -135,17 +135,18 @@ classdef TIFFStack < handle
          oStack.fhRepSum = GetMexFunctionHandles;
          
          % - Check for inversion flag
-         if (~exist('bInvert', 'var'))
+         if (~exist('bInvert', 'var') || isempty(bInvert))
             bInvert = false;
          end
          oStack.bInvert = bInvert;
          
          % - Check for frame dimensions
          if (~exist('vnFrameDims', 'var'))
-            vnFrameDims = []
-         elseif ~isnumeric(vnFrameDims)
+            vnFrameDims = [];
+            
+         elseif (~isnumeric(vnFrameDims))
             error('TIFFStack:InvalidArgument', ...
-                  '*** TIFFStack: vnFrameDims should be a numeric vector.')
+                  '*** TIFFStack: ''vnFrameDims'' should be a numeric vector.')
          end
 
          % - See if filename exists
@@ -300,21 +301,21 @@ classdef TIFFStack < handle
             % - Record stack size
             oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
             
-            % - Initialize apparent size, reinterpreting frame dimension
-            nFrameDims = prod(vnFrameDims);
-            if ~numel(vnFrameDims)
-               nFrames = oStack.vnDataSize(3);
-            elseif oStack.vnDataSize(3) == nFrameDims
-               nFrames = [];
-            elseif mod(oStack.vnDataSize(3), nFrameDims) ~= 0
+            % - Initialize apparent stack size, de-interleaving along the frame dimension
+            if isempty(vnFrameDims)
+               % - No de-interleaving
+               oStack.vnApparentSize = oStack.vnDataSize;
+            
+            elseif (prod(vnFrameDims) ~= oStack.vnDataSize(3))
+               % - Incorrect total number of deinterleaved frames
                error('TIFFStack:WrongFrameDims', ...
-                     '*** TIFFStack: the number of elements must not change.');
+                     '*** TIFFStack: When de-interleaving a stack, the total number of frames must not change.');
+            
             else
-               nFrames = oStack.vnDataSize(3) / nFrameDims;
+               % - Record apparent stack dimensions
+               oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnFrameDims(:)' oStack.vnDataSize(4)];
             end
-            oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnFrameDims(:)' ...
-                                     nFrames oStack.vnDataSize(4)];
-
+            
             % - Initialise dimension order
             oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
 
@@ -453,7 +454,7 @@ classdef TIFFStack < handle
                   % - Check trailing dimensions for inappropriate indices
                   if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
                      % - This is an error
-                     error('TIFFStack:BadSubscript', ...
+                     error('TIFFStack:badsubscript', ...
                         '*** TIFFStack: Index exceeds stack dimensions.');
                   end
                   
@@ -481,15 +482,23 @@ classdef TIFFStack < handle
                   return;
                end
                
-               % reinterpret indices for deinterleaved files
-               if numel(oStack.vnApparentSize) > 4
-                  cSubs = S.subs(3:end-1);
-                  if all(cellfun(@iscolon, cSubs))
+               % - Re-interleave frame indices for deinterleaved stacks
+               if (numel(oStack.vnApparentSize) > 4)
+                  % - Get frame 
+                  cFrameSubs = S.subs(3:end-1);
+                  if all(cellfun(@iscolon, cFrameSubs))
                      S.subs = {S.subs{1} S.subs{2}  ':' S.subs{end}};
                   else
-                     mIdx = reshape(1:oStack.vnDataSize(3), ...
-                                    oStack.vnApparentSize(3:end-1));
-                     S.subs = {S.subs{1} S.subs{2}  mIdx(cSubs{:}) S.subs{end}};
+                     if (bLinearIndexing)
+                        vnFrameIndices = sub2ind(oStack.vnApparentSize(3:end-1), cFrameSubs{:});
+                     else
+                        tnFrameIndices = reshape(1:oStack.vnDataSize(3), ...
+                           oStack.vnApparentSize(3:end-1));
+                        vnFrameIndices = tnFrameIndices(cFrameSubs{:});
+                     end
+                     
+                     % - Construct referencing subscripts for raw stack
+                     S.subs = [S.subs(1:2) {vnFrameIndices(:)} S.subs(end)];
                   end
                end
 
@@ -673,7 +682,7 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
    vnMaxRange = cellfun(@(c)(max(c)), cIndices);
    
    if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
-      error('TIFFStack:BadSubscript', ...
+      error('TIFFStack:badsubscript', ...
             '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
@@ -749,7 +758,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
    
    if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
-      error('TIFFStack:BadSubscript', ...
+      error('TIFFStack:badsubscript', ...
          '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
@@ -932,7 +941,7 @@ function isvalidsubscript(oRefs)
       end
       
    catch
-      error('TIFFStack:BadSubscript', ...
+      error('TIFFStack:badsubscript', ...
             '*** TIFFStack: Subscript indices must either be real positive integers or logicals.');
    end
 end

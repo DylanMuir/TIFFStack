@@ -76,11 +76,21 @@ function TS_UnitTest(strFilename)
    tsStack = permute(tsStack, [3 4 1 2]);
    tfStack = permute(tfStack, [3 4 1 2]);
    TSUT_TestReferencing(tsStack, tfStack, 'Simple permutation');
+   tsStack = ipermute(tsStack, [3 4 1 2]);
+   tfStack = ipermute(tfStack, [3 4 1 2]);   
    
    %% - Test inverted stack
    tsStack.bInvert = true;
    tfStack = 255 - tfStack;
    TSUT_TestReferencing(tsStack, tfStack, 'Inverted stack');
+   tsStack.bInvert = false;
+   tfStack = 255 - tfStack;
+   
+   %% - Test deinterleaved stack
+   nNumFrames = size(tfStack, 3);
+   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames]);
+   tfStack = reshape(tfStack, [size(tfStack, 1) size(tfStack, 2) 1 1 nNumFrames size(tfStack, 4)]);
+   TSUT_TestReferencing(tsStack, tfStack, 'Deinterleaved stack');
    
    %% - Success if we reach here with no errors
    disp('--- TS_UnitTest: Unit tests for ''TIFFStack'' passed.');
