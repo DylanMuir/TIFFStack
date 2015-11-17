@@ -113,6 +113,9 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
    TSUT_compareRef(1, 1, 1, 1);
    TSUT_compareRef(1, 1, 1, 1, 1);
    TSUT_compareRef(1, 1, 1, 1, 1, 1);
+   
+   % - Test logical indexing
+   TSUT_compareRef([true false true], [true true false], [false false true]);
 
    % - Test limit cases that should cause errors
    vnStackSize = size(tfStack);
