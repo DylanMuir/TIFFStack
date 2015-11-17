@@ -103,7 +103,7 @@ classdef TIFFStack < handle
    
    methods
       % TIFFStack - CONSTRUCTOR
-      function oStack = TIFFStack(strFilename, bInvert)
+      function oStack = TIFFStack(strFilename, bInvert, vnFrameDims)
          % - Check usage
          if (~exist('strFilename', 'var') || ~ischar(strFilename))
             help TIFFStack;
@@ -135,6 +135,14 @@ classdef TIFFStack < handle
          end
          oStack.bInvert = bInvert;
          
+         % - Check for frame dimensions
+         if (~exist('vnFrameDims', 'var'))
+            vnFrameDims = []
+         elseif ~isnumeric(vnFrameDims)
+            error('TIFFStack:InvalidArgument', ...
+                  '*** TIFFStack: vnFrameDims should be a numeric vector.')
+         end
+
          % - See if filename exists
          if (~exist(strFilename, 'file'))
             error('TIFFStack:InvalidFile', ...
@@ -286,10 +294,24 @@ classdef TIFFStack < handle
             
             % - Record stack size
             oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
-            oStack.vnApparentSize = oStack.vnDataSize;
+            
+            % - Initialize apparent size, reinterpreting frame dimension
+            nFrameDims = prod(vnFrameDims);
+            if ~numel(vnFrameDims)
+               nFrames = oStack.vnDataSize(3);
+            elseif oStack.vnDataSize(3) == nFrameDims
+               nFrames = [];
+            elseif mod(oStack.vnDataSize(3), nFrameDims) ~= 0
+               error('TIFFStack:WrongFrameDims', ...
+                     '*** TIFFStack: the number of elements must not change.');
+            else
+               nFrames = oStack.vnDataSize(3) / nFrameDims;
+            end
+            oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnFrameDims(:)' ...
+                                     nFrames oStack.vnDataSize(4)];
 
             % - Initialise dimension order
-            oStack.vnDimensionOrder = 1:numel(oStack.vnDataSize);
+            oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
 
          catch mErr
             base_ME = MException('TIFFStack:InvalidFile', ...
@@ -323,19 +345,6 @@ classdef TIFFStack < handle
          fprintf('   fhReadFun: %s\n', func2str(oStack.fhReadFun));
          fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
          fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
-      end
-
-      % deinterleave - METHOD reinterpret the frame axis as several axes
-      function deinterleave(oStack, dims)
-         if prod(dims) ~= oStack.vnDataSize(3)
-            error('TIFFStack:WrongShape', ...
-                  '*** TIFFStack: the number of elements must not change.');
-         end
-
-         oStack.vnApparentSize = ...
-            [oStack.vnDataSize(1:2) dims(:)' oStack.vnDataSize(4)];
-
-         oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
       end
 
 %% --- Overloaded subsref
