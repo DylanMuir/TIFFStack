@@ -90,6 +90,7 @@ classdef TIFFStack < handle
    
    properties (SetAccess = private, GetAccess = private)
       vnDataSize;          % - Cached size of the TIFF stack
+      vnApparentSize;      % - Apparent size of the TIFF stack
       TIF;                 % \_ Cached header info for tiffread29 speedups
       HEADER;              % /
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
@@ -285,6 +286,7 @@ classdef TIFFStack < handle
             
             % - Record stack size
             oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
+            oStack.vnApparentSize = oStack.vnDataSize;
 
             % - Initialise dimension order
             oStack.vnDimensionOrder = 1:numel(oStack.vnDataSize);
@@ -322,7 +324,20 @@ classdef TIFFStack < handle
          fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
          fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
       end
-      
+
+      % deinterleave - METHOD reinterpret the frame axis as several axes
+      function deinterleave(oStack, dims)
+         if prod(dims) ~= oStack.vnDataSize(3)
+            error('TIFFStack:WrongShape', ...
+                  '*** TIFFStack: the number of elements must not change.');
+         end
+
+         oStack.vnApparentSize = ...
+            [oStack.vnDataSize(1:2) dims(:)' oStack.vnDataSize(4)];
+
+         oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
+      end
+
 %% --- Overloaded subsref
 
       function [tfData] = subsref(oStack, S)
@@ -452,6 +467,14 @@ classdef TIFFStack < handle
                   return;
                end
                
+               % reinterpret indices for deinterleaved files
+               if numel(oStack.vnApparentSize) > 4
+                  idx = reshape(1:oStack.vnDataSize(3), ...
+                                oStack.vnApparentSize(3:end-1));
+                  cSubs = S.subs(3:end-1);
+                  S.subs = {S.subs{1} S.subs{2}  idx(cSubs{:}) S.subs{end}};
+               end
+
                % - Access stack (tifflib or tiffread)
                if (oStack.bUseTiffLib)
                   tfData = TS_read_data_Tiff(oStack, S.subs, bLinearIndexing);
@@ -486,11 +509,11 @@ classdef TIFFStack < handle
 
       function [varargout] = size(oStack, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
-         vnDataSize = oStack.vnDataSize; %#ok<PROP>
-         vnDataSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROP>
+         vnApparentSize = oStack.vnApparentSize; %#ok<PROP>
+         vnApparentSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROP>
          
          % - Return the size of the tensor data element, permuted
-         vnSize = vnDataSize(oStack.vnDimensionOrder); %#ok<PROP>
+         vnSize = vnApparentSize(oStack.vnDimensionOrder); %#ok<PROP>
          
          % - Trim trailing unitary dimensions
          vbIsUnitary = vnSize == 1;
