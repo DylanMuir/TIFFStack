@@ -67,6 +67,11 @@
 % >> tsStack(4);           % Linear indexing is supported
 % 
 % >> tsStack.bInvert = true;  % Turn on data inversion
+%
+% >> getFilename(tsStack)  % Retrieve the 'strFilename' property
+% >> getInvert(tsStack)    % Retrive the 'bInvert' property
+% >> getImageInfo(tsStack) % Retrieve the 'sImageInfo' property
+% >> getDataClass(tsStack) % Retrive the 'strDataClass' property
 % 
 % References:
 % [1] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review Letters
@@ -364,8 +369,8 @@ classdef TIFFStack < handle
                      try
                         [cIndices{1:nNumTotalStackDims}] = ind2sub(vnTensorSize, S.subs{1});
                      catch
-                        error('TIFFStack:InvalidRef', ...
-                           '*** TIFFStack: Subscript out of range.');
+                        error('TIFFStack:badsubscript', ...
+                           '*** TIFFStack: Index exceeds stack dimensions.');
                      end
                      vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
@@ -464,20 +469,35 @@ classdef TIFFStack < handle
                   tfData = permute(tfData, oStack.vnDimensionOrder);
                end
                
-               % - Reshape return data to concatenate trailing dimensions (just as
-               % matlab does)
+               % - Reshape returned data to concatenate trailing dimensions (just as matlab does)
                if (~isequal(size(tfData), vnRetDataSize))
                   tfData = reshape(tfData, vnRetDataSize);
                end
-               
-            case '.'
-               tfData = builtin('subsref', oStack, S);
                
             otherwise
                error('TIFFStack:InvalidReferencing', ...
                      '*** TIFFStack: Only ''()'' referencing is supported by TIFFStacks.');
          end
       end
+      
+%% --- Getter methods
+
+      function strFilename = getFilename(oStack)
+         strFilename = oStack.strFilename;
+      end
+
+      function sImageInfo = getImageInfo(oStack)
+         sImageInfo = oStack.sImageInfo;
+      end
+      
+      function bInvert = getInvert(oStack)
+         bInvert = oStack.bInvert;
+      end
+      
+      function strDataClass = getDataClass(oStack)
+         strDataClass = oStack.strDataClass;
+      end
+      
       
 %% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose
       function [n] = numel(oStack)
@@ -787,7 +807,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    
    % - Invert data if requested
    if (oStack.bInvert)
-      tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
+      tfData = oStack.sImageInfo(1).MaxSampleValue(1) - (tfData - oStack.sImageInfo(1).MinSampleValue(1));
    end
 end
 
@@ -818,12 +838,16 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
    nLastNonOne = find(~vbOnes, 1, 'last');
    vbTrailingRefs((nLastNonOne+1):end) = false;
 
+   % - Check reference limits
+   if (any(cellfun(@(r,l)any(r>l), cRefs(~vbIsColon), num2cell(vnLims(~vbIsColon)))))
+      error('TIFFStack:badsubscript', 'Index exceeds matrix dimensions.');
+   end
+   
    % - Work out how many linear indices there will be in total
    nNumIndices = prod(vnDimRefSizes);
    vnLinearIndices = zeros(nNumIndices, 1);
    
-   % - Build a referencing window encompassing the leading colon refs (or
-   % first ref)
+   % - Build a referencing window encompassing the leading colon refs (or first ref)
    if (nFirstNonColon > 1)
       vnLinearIndices(1:prod(vnLims(1:(nFirstNonColon-1)))) = 1:prod(vnLims(1:(nFirstNonColon-1)));
    else
