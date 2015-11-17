@@ -478,10 +478,14 @@ classdef TIFFStack < handle
                
                % reinterpret indices for deinterleaved files
                if numel(oStack.vnApparentSize) > 4
-                  idx = reshape(1:oStack.vnDataSize(3), ...
-                                oStack.vnApparentSize(3:end-1));
                   cSubs = S.subs(3:end-1);
-                  S.subs = {S.subs{1} S.subs{2}  idx(cSubs{:}) S.subs{end}};
+                  if all(cellfun(@iscolon, cSubs))
+                     S.subs = {S.subs{1} S.subs{2}  ':' S.subs{end}};
+                  else
+                     mIdx = reshape(1:oStack.vnDataSize(3), ...
+                                    oStack.vnApparentSize(3:end-1));
+                     S.subs = {S.subs{1} S.subs{2}  mIdx(cSubs{:}) S.subs{end}};
+                  end
                end
 
                % - Access stack (tifflib or tiffread)
