@@ -32,13 +32,13 @@ directory &mdash; not the *@TIFFStack* directory &mdash; to the [Matlab] path.
     tsStack = TIFFStack(strFilename <, bInvert>)
 
 A `TIFFStack` object behaves like a read-only memory mapped TIFF file.
-The entire image stack is treated as a matlab tensor. Each frame of the
+The entire image stack is treated as a Matlab tensor. Each frame of the
 file must have the same dimensions. Reading the image data is optimised
 to the extent possible; the header information is only read once.
 
-This class attempts to use the Matlab tifflib interface, if available.
+This class attempts to use the Matlab libTiff interface, if available.
 If not, it uses a modified version of `tiffread` \[1, 2\] to read data.
-Code is included (but disabled) to use the matlab imread function, but
+Code is included (but disabled) to use the matlab `imread` function, but
 this function returns invalid data for some TIFF formats.
 
 ## Construction of a `TIFFStack` object
@@ -65,6 +65,55 @@ this function returns invalid data for some TIFF formats.
 
     >> tsStack(4); % Linear indexing is supported 
     >> tsStack.bInvert = true; % Turn on data inversion
+
+## Stacks with interleaved frame, channel and slice dimensions
+
+Some TIFF generation software stores multiple samples per pixel as
+interleaved frames in a TIFF file. Other complex stacks may include
+multiple different images per frame of time (e.g. multiple cameras or
+different imaged locations per frame). `TIFFStack` allows these files to be
+de-interleaved, such that each conceptual data dimension has its own
+referencing dimension within Matlab.
+
+This functionality uses the optional `vnInterleavedFrameDims` argument.
+This is a vector of dimensions that were interleaved into the single
+frame dimension in the stack.
+
+For example, a stack contains 2 channels of data per pixel, and 3 imaged
+locations per frame, all interleaved into the TIFF frame dimension. The
+stack contains 10 conceptual frames, and each frame contains 5x5 pixels.
+
+The stack is therefore conceptually of dimensions [5 5 2 3 10 1], but
+appears on disk with dimensions [5 5 60 1]. (The final dimension
+corresponds to the samples-per-pixel dimension of the TIFF file).
+
+```
+>> tsStack = TIFFStack('file.tif', [], [2 3 10]);
+>> size(tsStack)
+
+ans =
+     5    5    2    3   10
+```
+
+
+Permutation and indexing now works seamlessly on this stack, with each
+conceptual dimension de-interleaved.
+
+If desired, the final number of frames can be left off
+`vnInterleavedFrameDims`; for example
+
+```
+>> tsStack = TIFFStack('file.tif', [], [2 3]);
+>> size(tsStack)
+
+ans =
+     5    5    2    3   10
+```
+
+*Note*: You must be careful that you specify the dimensions in the
+appropriate order, exactly as interleaved in the stack. Also, if the stack
+contains multiple samples per pixel in native TIFF format, the
+samples-per-pixel dimension will always be pushed to the final dimension.
 
 ## Publications
 
