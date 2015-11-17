@@ -108,7 +108,7 @@ classdef TIFFStack < handle
    
    methods
       % TIFFStack - CONSTRUCTOR
-      function oStack = TIFFStack(strFilename, bInvert, vnFrameDims)
+      function oStack = TIFFStack(strFilename, bInvert, vnInterleavedFrameDims)
          % - Check usage
          if (~exist('strFilename', 'var') || ~ischar(strFilename))
             help TIFFStack;
@@ -141,12 +141,11 @@ classdef TIFFStack < handle
          oStack.bInvert = bInvert;
          
          % - Check for frame dimensions
-         if (~exist('vnFrameDims', 'var'))
-            vnFrameDims = [];
-            
-         elseif (~isnumeric(vnFrameDims))
-            error('TIFFStack:InvalidArgument', ...
-                  '*** TIFFStack: ''vnFrameDims'' should be a numeric vector.')
+         if (~exist('vnInterleavedFrameDims', 'var'))
+            vnInterleavedFrameDims = [];
+         else
+            validateattributes(vnInterleavedFrameDims, {'single', 'double'}, {'integer', 'real', 'positive'}, ...
+               'TIFFStack', 'vnInterleavedFrameDims');
          end
 
          % - See if filename exists
@@ -302,18 +301,26 @@ classdef TIFFStack < handle
             oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
             
             % - Initialize apparent stack size, de-interleaving along the frame dimension
-            if isempty(vnFrameDims)
+            if isempty(vnInterleavedFrameDims)
                % - No de-interleaving
                oStack.vnApparentSize = oStack.vnDataSize;
             
-            elseif (prod(vnFrameDims) ~= oStack.vnDataSize(3))
-               % - Incorrect total number of deinterleaved frames
-               error('TIFFStack:WrongFrameDims', ...
+            elseif (prod(vnInterleavedFrameDims) ~= oStack.vnDataSize(3))
+               % - Be lenient by allowing frames dimension to be left out of arguments
+               if (mod(oStack.vnDataSize(3), prod(vnInterleavedFrameDims)) == 0)
+                  % - Work out number of apparent frames
+                  nNumApparentFrames = oStack.vnDataSize(3) ./ prod(vnInterleavedFrameDims);
+                  oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnInterleavedFrameDims(:)' nNumApparentFrames oStack.vnDataSize(4)];
+                  
+               else
+                  % - Incorrect total number of deinterleaved frames
+                  error('TIFFStack:WrongFrameDims', ...
                      '*** TIFFStack: When de-interleaving a stack, the total number of frames must not change.');
-            
+               end
+               
             else
                % - Record apparent stack dimensions
-               oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnFrameDims(:)' oStack.vnDataSize(4)];
+               oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnInterleavedFrameDims(:)' oStack.vnDataSize(4)];
             end
             
             % - Initialise dimension order
