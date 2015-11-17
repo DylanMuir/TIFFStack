@@ -448,7 +448,7 @@ classdef TIFFStack < handle
                   % - Check trailing dimensions for inappropriate indices
                   if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
                      % - This is an error
-                     error('TIFFStack:badsubscript', ...
+                     error('TIFFStack:BadSubscript', ...
                         '*** TIFFStack: Index exceeds stack dimensions.');
                   end
                   
@@ -536,7 +536,7 @@ classdef TIFFStack < handle
          % - Return specific dimension(s)
          if (exist('vnDimensions', 'var'))
             if (~isnumeric(vnDimensions) || any(vnDimensions < 1))
-               error('TIFFStack:dimensionMustBePositiveInteger', ...
+               error('TIFFStack:DimensionMustBePositiveInteger', ...
                   '*** TIFFStack: Dimensions argument must be a positive integer.');
             end
             
@@ -610,7 +610,7 @@ classdef TIFFStack < handle
       function set.bInvert(oStack, bInvert)
          % - Check contents
          if (~islogical(bInvert) || ~isscalar(bInvert))
-            error('TIFFStack:invalidArgument', ...
+            error('TIFFStack:InvalidArgument', ...
                   '*** TIFFStack/set.bInvert: ''bInvert'' must be a logical scalar.');
          else
             % - Assign bInvert value
@@ -649,7 +649,7 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
    vnMaxRange = cellfun(@(c)(max(c)), cIndices);
    
    if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
-      error('TIFFStack:badsubscript', ...
+      error('TIFFStack:BadSubscript', ...
             '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
@@ -725,7 +725,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
    
    if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
-      error('TIFFStack:badsubscript', ...
+      error('TIFFStack:BadSubscript', ...
          '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
@@ -904,7 +904,7 @@ function isvalidsubscript(oRefs)
       end
       
    catch
-      error('TIFFStack:badsubscript', ...
+      error('TIFFStack:BadSubscript', ...
             '*** TIFFStack: Subscript indices must either be real positive integers or logicals.');
    end
 end
