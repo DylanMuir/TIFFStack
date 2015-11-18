@@ -521,6 +521,7 @@ classdef TIFFStack < handle
                      S.subs = S.subs(1:nNumNZStackDims);
                   end
                   
+                  % - Determine returned data size
                   vnReferencedTensorSize(nNumNZStackDims+1:nNumRefDims) = 1;
                   vnReferencedTensorSize(vnReferencedTensorSize == 0) = 1;
                   vbIsColon = cellfun(@iscolon, S.subs);
