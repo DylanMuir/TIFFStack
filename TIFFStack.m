@@ -541,6 +541,13 @@ classdef TIFFStack < handle
                
                % - Re-interleave frame indices for deinterleaved stacks
                if (numel(oStack.vnApparentSize) > 4)
+                  % - Record output data size in deinterleaved space
+                  if (~bLinearIndexing)
+                     vnOutputSize = cellfun(@numel, S.subs);
+                     vbIsColon = cellfun(@iscolon, S.subs);
+                     vnOutputSize(vbIsColon) = oStack.vnApparentSize(vbIsColon);
+                  end
+                  
                   % - Get frame 
                   cFrameSubs = S.subs(3:end-1);
                   if all(cellfun(@iscolon, cFrameSubs))
@@ -568,6 +575,11 @@ classdef TIFFStack < handle
                
                % - Permute dimensions, if linear indexing has not been used
                if (~bLinearIndexing)
+                  % - Reshape resulting data in case of deinterleaved stacks
+                  if (numel(oStack.vnApparentSize) > 4)
+                     tfData = reshape(tfData, vnOutputSize);
+                  end
+
                   tfData = permute(tfData, oStack.vnDimensionOrder);
                end
                
