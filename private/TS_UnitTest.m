@@ -73,15 +73,31 @@ function TS_UnitTest(strFilename)
    TSUT_TestReferencing(tsStack, tfStack, 'Raw stack');
    
    %% - Test permuted stack
-   tsStack = permute(tsStack, [3 4 1 2]);
-   tfStack = permute(tfStack, [3 4 1 2]);
+   tsStack = permute(tsStack, [3 1 2]);
+   tfStack = permute(tfStack, [3 1 2]);
    TSUT_TestReferencing(tsStack, tfStack, 'Simple permutation');
+   tsStack = ipermute(tsStack, [3 1 2]);
+   tfStack = ipermute(tfStack, [3 1 2]);   
    
    %% - Test inverted stack
    tsStack.bInvert = true;
    tfStack = 255 - tfStack;
    TSUT_TestReferencing(tsStack, tfStack, 'Inverted stack');
+   tsStack.bInvert = false;
+   tfStack = 255 - tfStack;
    
+   %% - Test non-accelerated reading funcitons
+   w = warning('off', 'TIFFStack:SlowAccess');
+   tsStack = TIFFStack(strFilename, [], [], true);
+   TSUT_TestReferencing(tsStack, tfStack, 'Non-accelerated TIFF reading');
+   warning(w);
+
+   %% - Test deinterleaved stack
+   nNumFrames = size(tfStack, 3);
+   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames]);
+   tfStack = reshape(tfStack, [size(tfStack, 1) size(tfStack, 2) 1 1 nNumFrames size(tfStack, 4)]);
+   TSUT_TestReferencing(tsStack, tfStack, 'Deinterleaved stack');
+
    %% - Success if we reach here with no errors
    disp('--- TS_UnitTest: Unit tests for ''TIFFStack'' passed.');
 end
@@ -98,10 +114,18 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
    
    % - Test referencing subpixels
    TSUT_compareRef(1:2, ':');
-   TSUT_compareRef(1:2, 2:3, ':');
-   TSUT_compareRef(1:2, 20);
-   TSUT_compareRef([1 3], 20);
-   TSUT_compareRef(':', ':', ':', 3);
+   TSUT_compareRef(1:2, 1:2, ':');
+   TSUT_compareRef(1:2, 9);
+   TSUT_compareRef([1 3], 9);
+   TSUT_compareRef(':', ':', 3);
+   
+   % - Test empty referencing
+   TSUT_compareRef([]);
+   TSUT_compareRef([], []);
+   TSUT_compareRef([], [], []);
+   TSUT_compareRef([], [], [], []);
+   TSUT_compareRef([], [], [], [], []);
+   TSUT_compareRef(1, 1, 1, [], 1);
    
    % - Test referencing using 'end'
    TSUT_compareEndRefs();
@@ -129,6 +153,7 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
    TSUT_testInvalidRef('TIFFStack:badsubscript', 1, vnStackSize(2)+1, 1);
    TSUT_testInvalidRef('TIFFStack:badsubscript', 1, 1, vnStackSize(3)+1, 1);
    TSUT_testInvalidRef('TIFFStack:badsubscript', {1});
+   TSUT_testInvalidRef('TIFFStack:badsubscript', 1, 1, 1, 1, 1, 1, 1, 2);
    
    % - Function to compare results of referencing stack
    function TSUT_compareRef(varargin)
@@ -142,7 +167,7 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
             'The referencing result was not equal between TIFFStack and standard tensor, with subs %s.', TSUT_subs2str(varargin));
          
       catch mErr
-         mUTErr = MException('TIFFStack:UnitTestFailed', 'Could not reference stack with subs %s, during test [%s]', ...
+         mUTErr = MException('TIFFStack:UnitTestFailed', 'Failure referencing stack with subs %s, during test [%s]', ...
             TSUT_subs2str(varargin), strTestName);
          mErr = mErr.addCause(mUTErr);
          rethrow(mErr);
@@ -171,7 +196,7 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
             tfStack(1, 1, 1, 1, 1, 1:end));
          
       catch mErr
-         mUTErr = MException('TIFFStack:UnitTestFailed', 'Could not reference stack with using ''end'' referencing, during test [%s]', ...
+         mUTErr = MException('TIFFStack:UnitTestFailed', 'Failure referencing stack with using ''end'' referencing, during test [%s]', ...
             strTestName);
          mErr = mErr.addCause(mUTErr);
          rethrow(mErr);
@@ -212,7 +237,7 @@ end
 function strSubs = TSUT_subs2str(varargin)
    cSubsStr = cellfun(@num2str, varargin{:}, 'UniformOutput', false);
    strSubs = ['(' ...
-              sprintf('%s, ', cSubsStr{:}) ...
-              sprintf('\b') ...
+              sprintf('[%s], ', cSubsStr{:}) ...
+              sprintf('\b\b') ...
               ')'];
 end
