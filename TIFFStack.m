@@ -409,10 +409,14 @@ classdef TIFFStack < handle
       function diagnostic(oStack)
          disp(oStack);
          fprintf('<strong>Private properties:</strong>\n');
+         fprintf('   vnDataSize: ['); fprintf('%d ', oStack.vnDataSize); fprintf(']\n');
+         fprintf('   vnApparentSize: ['); fprintf('%d ', oStack.vnApparentSize); fprintf(']\n');
+         fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
          fprintf('   bUseTiffLib: %d\n', oStack.bUseTiffLib);
          fprintf('   fhReadFun: %s\n', func2str(oStack.fhReadFun));
-         fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
+         fprintf('   fhSetDirFun: %s\n', func2str(oStack.fhSetDirFun));
          fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
+         fprintf('   fhCastFun: %s\n', func2str(oStack.fhCastFun));
       end
 
 %% --- Overloaded subsref
