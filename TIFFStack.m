@@ -158,12 +158,17 @@ classdef TIFFStack < handle
    
    methods
       % TIFFStack - CONSTRUCTOR
-      function oStack = TIFFStack(strFilename, bInvert, vnInterleavedFrameDims)
+      function oStack = TIFFStack(strFilename, bInvert, vnInterleavedFrameDims, bForceTiffread)
          % - Check usage
          if (~exist('strFilename', 'var') || ~ischar(strFilename))
             help TIFFStack;
             error('TIFFStack:Usage', ...
                   '*** TIFFStack: Incorrect usage.');
+         end
+         
+         % - Should we force TIFFStack to use tiffread, rather than libTiff?
+         if (~exist('bForceTiffread', 'var') || isempty(bForceTiffread))
+            bForceTiffread = false;
          end
          
          % - Can we use the accelerated TIFF library?
@@ -174,7 +179,7 @@ classdef TIFFStack < handle
             copyfile(strTiffLibLoc, fullfile(strTIFFStackLoc, 'private'), 'f');
          end
          
-         oStack.bUseTiffLib = (exist('tifflib') == 3); %#ok<EXIST>
+         oStack.bUseTiffLib = (exist('tifflib') == 3) & ~bForceTiffread; %#ok<EXIST>
          
          if (~oStack.bUseTiffLib)
             warning('TIFFStack:SlowAccess', ...
@@ -448,12 +453,14 @@ classdef TIFFStack < handle
                   else
                      % - Get equivalent subscripted indexes and permute
                      vnTensorSize = size(oStack);
-                     try
-                        [cIndices{1:nNumTotalStackDims}] = ind2sub(vnTensorSize, S.subs{1});
-                     catch
+                     if any(S.subs{1}(:) > prod(vnTensorSize))
                         error('TIFFStack:badsubscript', ...
                            '*** TIFFStack: Index exceeds stack dimensions.');
+                     else
+                        [cIndices{1:nNumTotalStackDims}] = ind2sub(vnTensorSize, S.subs{1});
                      end
+                     
+                     % - Permute dimensions
                      vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
                      vnRetDataSize = size(S.subs{1});
@@ -736,24 +743,27 @@ end
 % or so on.
 
 function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
+   % - Fix up final index dimensions, if necessary
+   cIndices(end+1:4) = {1};
+   
    % - Convert colon indexing
    vbIsColon = cellfun(@iscolon, cIndices);
    
    for (nColonDim = find(vbIsColon))
       cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
    end
-      
+
    % - Fix up subsample detection for unitary dimensions
    vbIsOne = cellfun(@(c)isequal(c, 1), cIndices);
    vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
    
    % - Check ranges
-   vnMinRange = cellfun(@(c)(min(c)), cIndices);
-   vnMaxRange = cellfun(@(c)(max(c)), cIndices);
+   vnMinRange = cellfun(@(c)(min(c(:))), cIndices(~vbIsColon));
+   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
    
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
       error('TIFFStack:badsubscript', ...
-            '*** TIFFStack: Index exceeds stack dimensions.');
+         '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
    % - Find unique frames to read
