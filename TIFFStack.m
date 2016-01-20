@@ -144,6 +144,7 @@ classdef TIFFStack < handle
    end
    
    properties (SetAccess = private, GetAccess = private)
+      bForceTiffread       % - Force the use of tiffread, rather than trying to use TiffLib
       vnDataSize;          % - Cached size of the TIFF stack
       vnApparentSize;      % - Apparent size of the TIFF stack
       TIF;                 % \_ Cached header info for tiffread29 speedups
@@ -151,7 +152,7 @@ classdef TIFFStack < handle
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
       fhReadFun;           % - When using Tiff class, function for reading data
       fhSetDirFun;         % - When using Tiff class, function for setting the directory
-      vnDimensionOrder;    % - Internal dimensions order to support permution
+      vnDimensionOrder;    % - Internal dimensions order to support permutation
       fhRepSum;            % - Function handle to (hopefully) accellerated repsum function
       fhCastFun;           % - The matlab function that casts data to the required return class
    end
@@ -170,6 +171,7 @@ classdef TIFFStack < handle
          if (~exist('bForceTiffread', 'var') || isempty(bForceTiffread))
             bForceTiffread = false;
          end
+         oStack.bForceTiffread = bForceTiffread;
          
          % - Can we use the accelerated TIFF library?
          if (exist('tifflib') ~= 3) %#ok<EXIST>
@@ -340,10 +342,10 @@ classdef TIFFStack < handle
                
             else
                % - Read TIFF header for tiffread29
-               [oStack.TIF, oStack.HEADER] = tiffread29_header(strFilename);
+               [oStack.TIF, oStack.HEADER] = tiffread31_header(strFilename);
 
                % - Use tiffread29 to get the data class for this tiff
-               fPixel = tiffread29_readimage(oStack.TIF, oStack.HEADER, 1);
+               fPixel = tiffread31_readimage(oStack.TIF, oStack.HEADER, 1);
                fPixel = fPixel(1, 1, :);
                oStack.strDataClass = class(fPixel);
             end
@@ -731,7 +733,35 @@ classdef TIFFStack < handle
             oStack.bInvert = bInvert;
          end
       end
+            
       
+%% --- Overloaded save method
+      % saveobj - Save method
+      function sSerialised = saveobj(tsStack)
+         % - Serialise object and remove transient properties
+         w = warning('off', 'MATLAB:structOnObject');
+         sSerialised = struct(tsStack);
+         sSerialised = rmfield(sSerialised, {'TIF', 'HEADER', 'fhReadFun', 'fhSetDirFun', 'fhRepSum', 'fhCastFun'});
+         warning(w);
+      end
+      
+   end
+
+%% -- Overloaded load method
+
+   methods (Static)
+      
+      % loadobj - Load method
+      function oStack = loadobj(sSavedVar)
+         % - Create a new TIFFStack
+         oStack = TIFFStack(sSavedVar.strFilename, sSavedVar.bInvert, [], ...
+                            sSavedVar.bForceTiffread);
+
+         % - Adjust dimensions to look like saved stack
+         oStack.vnApparentSize = sSavedVar.vnApparentSize;
+         oStack.vnDimensionOrder = sSavedVar.vnDimensionOrder;
+      end
+
    end
 end
 
@@ -775,7 +805,7 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
    
    % - Read data block
    try
-      tfDataBlock = tiffread29_readimage(oStack.TIF, oStack.HEADER, vnFrameIndices);
+      tfDataBlock = tiffread31_readimage(oStack.TIF, oStack.HEADER, vnFrameIndices);
       
    catch mErr
       % - Record error state
