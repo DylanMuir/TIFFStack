@@ -14,6 +14,11 @@
 function TS_UnitTest(strFilename)
    % - Make sure TIFFStack is on the path
    strTSDir = fileparts(which('TIFFStack'));
+   
+   if (isempty(strTSDir))
+      error('TIFFStack:Path', '*** Error: ''TIFFStack'' is not available on the matlab path.');
+   end
+   
    strBaseDir = fileparts(strTSDir);
    addpath(strBaseDir);
 
@@ -73,12 +78,12 @@ function TS_UnitTest(strFilename)
    TSUT_TestReferencing(tsStack, tfStack, 'Raw stack');
    
    %% - Test permuted stack
-   tsStack = permute(tsStack, [3 1 2]);
-   tfStack = permute(tfStack, [3 1 2]);
+   tsStack = permute(tsStack, [3 1 2 4]);
+   tfStack = permute(tfStack, [3 1 2 4]);
    TSUT_TestReferencing(tsStack, tfStack, 'Simple permutation');
-   tsStack = ipermute(tsStack, [3 1 2]);
-   tfStack = ipermute(tfStack, [3 1 2]);   
-   
+   tsStack = ipermute(tsStack, [3 1 2 4]);
+   tfStack = ipermute(tfStack, [3 1 2 4]);   
+      
    %% - Test inverted stack
    tsStack.bInvert = true;
    tfStack = 255 - tfStack;
@@ -98,6 +103,12 @@ function TS_UnitTest(strFilename)
    tfStack = reshape(tfStack, [size(tfStack, 1) size(tfStack, 2) 1 1 nNumFrames size(tfStack, 4)]);
    TSUT_TestReferencing(tsStack, tfStack, 'Deinterleaved stack');
 
+   %% - Test saving / loading a stack
+   strMatFile = tempname;
+   save(strMatFile, 'tsStack');
+   s = load(strMatFile);
+   TSUT_TestReferencing(tsStack, s.tsStack, 'Serialised/Deserialised stack');
+   
    %% - Success if we reach here with no errors
    disp('--- TS_UnitTest: Unit tests for ''TIFFStack'' passed.');
 end
