@@ -109,12 +109,33 @@ function TS_UnitTest(strFilename)
    s = load(strMatFile);
    TSUT_TestReferencing(tsStack, s.tsStack, 'Serialised/Deserialised stack');
    
+   %% - Test error conditions
+   TSUT_assertFail('TIFFStack:Concatenation', '[tsStack tsStack];');
+   TSUT_assertFail('TIFFStack:Concatenation', '[tsStack; tsStack];');
+   TSUT_assertFail('TIFFStack:Concatenation', 'cat(1, tsStack, tsStack);');
+   TSUT_assertFail('TIFFStack:InvalidReferencing', 'tsStack{1}');
+   TSUT_assertFail('TIFFStack:InvalidReferencing', 'tsStack.diagnostic();');
+   TSUT_assertFail('TIFFStack:DimensionMustBePositiveInteger', 'size(tsStack, 0);');
+   TSUT_assertFail('TIFFStack:InvalidArgument', 'tsStack.bInvert = 2;');
+   
    %% - Success if we reach here with no errors
    disp('--- TS_UnitTest: Unit tests for ''TIFFStack'' passed.');
 end
 
 
 function TSUT_TestReferencing(tsStack, tfStack, strTestName)
+   % - Test stack sizes
+   assert(isequal(size(tsStack), size(tfStack)), ...
+          'TIFFStack:UnitTestFailed', 'The result of calling ''size'' was not equal between the two stacks.');
+   assert(isequal(size(tsStack, 1), size(tfStack, 1)), ...
+          'TIFFStack:UnitTestFailed', 'The result of calling ''size'' was not equal between the two stacks.');
+   assert(isequal(size(tsStack, 2), size(tfStack, 2)), ...
+          'TIFFStack:UnitTestFailed', 'The result of calling ''size'' was not equal between the two stacks.');
+   assert(isequal(size(tsStack, 3), size(tfStack, 3)), ...
+          'TIFFStack:UnitTestFailed', 'The result of calling ''size'' was not equal between the two stacks.');
+   assert(isequal(size(tsStack, 4), size(tfStack, 4)), ...
+          'TIFFStack:UnitTestFailed', 'The result of calling ''size'' was not equal between the two stacks.');
+
    % - Test referencing entire stack
    TSUT_compareRef(':');
    TSUT_compareRef(':', ':');
@@ -244,6 +265,30 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
             TSUT_subs2str(varargin), strTestName, strErrorID);
    end
 end
+
+% - Function to test errors with invalid references
+function TSUT_assertFail(strErrorID, strCommand)
+try
+   % - Evalulate command in called workspace
+   evalin('caller', strCommand);
+   
+catch mErr
+   % - Check whether the correct error was reported
+   if ~isequal(mErr.identifier, strErrorID)
+      mUTErr = MException('TIFFStack:UnitTestFailed', 'Incorrect error raised during error test with command [%s]. Desired error [%s], raised error [%s].', ...
+         strCommand, strErrorID, mErr.identifier);
+      mErr = mErr.addCause(mUTErr);
+      rethrow(mErr);
+   end
+   return;
+end
+
+% - We should never get here, so raise an error
+error('TIFFStack:UnitTestFailed:ErrorNotThrown', ...
+   'An error should have occurred but did not, with subs %s, during test [%s]. Desired error [%s].', ...
+   TSUT_subs2str(varargin), strTestName, strErrorID);
+end
+
 
 function strSubs = TSUT_subs2str(varargin)
    cSubsStr = cellfun(@num2str, varargin{:}, 'UniformOutput', false);

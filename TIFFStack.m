@@ -419,7 +419,7 @@ classdef TIFFStack < handle
 
 %% --- Overloaded subsref
 
-      function [tfData] = subsref(oStack, S)
+      function [varargout] = subsref(oStack, S)
          switch S(1).type
             case '()'
                % - Test for valid subscripts
@@ -545,7 +545,7 @@ classdef TIFFStack < handle
                
                % - Catch empty refs
                if (prod(vnRetDataSize) == 0)
-                  tfData = zeros(vnRetDataSize);
+                  [varargout{1:nargout}] = zeros(vnRetDataSize);
                   return;
                end
                
@@ -598,6 +598,8 @@ classdef TIFFStack < handle
                   tfData = reshape(tfData, vnRetDataSize);
                end
                
+               [varargout{1:nargout}] = tfData;
+               
             otherwise
                error('TIFFStack:InvalidReferencing', ...
                      '*** TIFFStack: Only ''()'' referencing is supported by TIFFStacks.');
@@ -623,8 +625,8 @@ classdef TIFFStack < handle
       end
       
       
-%% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose
-      function [n] = numel(oStack)
+%% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose, cat, horzcat, vertcat
+      function [n] = numel(oStack, varargin)
          n = prod(size(oStack)); %#ok<PSIZE>
       end
 
@@ -705,6 +707,22 @@ classdef TIFFStack < handle
          oStack = permute(oStack, [2 1]);
       end
 
+      % cat - METHOD Overloaded cat, horzcat, vertcat functions
+      function [varargout] = cat(varargin) %#ok<STOUT>
+         error('TIFFStack:Concatenation', ...
+            '*** TIFFStack: Concatenation is not supported by TIFFStack.');
+      end
+      
+      function [varargout] = horzcat(varargin) %#ok<STOUT>
+         error('TIFFStack:Concatenation', ...
+            '*** TIFFStack: Concatenation is not supported by TIFFStack.');
+      end
+      
+      function [varargout] = vertcat(varargin) %#ok<STOUT>
+         error('TIFFStack:Concatenation', ...
+            '*** TIFFStack: Concatenation is not supported by TIFFStack.');
+      end      
+      
 %% --- Overloaded end
 
       function nLength = end(oStack, nEndDim, nTotalRefDims)
