@@ -149,6 +149,7 @@ classdef MappedTensor < handle
    properties (SetAccess = private, GetAccess = private)
       strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
+      bReadOnly = false;      % Should the data be protected from writing?
       hRealContent;           % File handle for data (real part)
       hCmplxContent;          % File handle for data (complex part)
       bTemporary;             % A flag which records whether a temporary file was created by MappedTensor
@@ -195,6 +196,12 @@ classdef MappedTensor < handle
                   case {'machineformat'}
                      % - The machine format was specifed
                      mtVar.strMachineFormat = varargin{nArg+1};
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
+                  case {'readonly'}
+                     % - Read-only or read/write status was specified
+                     mtVar.bReadOnly = logical(varargin{nArg+1});
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
@@ -314,7 +321,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% Overloaded subsref, subsasg and end
+      %% Overloaded subsref, subsasgn and end
       function [varargout] = subsref(mtVar, subs)
          % - More than one return argument means cell or dot referencing was
          % used
@@ -351,67 +358,69 @@ classdef MappedTensor < handle
          nNumTotalDims = numel(mtVar.vnDimensionOrder);
          vnReferencedTensorSize = size(mtVar);
          
-         % - Handle different numbers of referencing dimensions
-         if (nNumDims == 1)
-            % - Translate from linear refs to indices
-            nNumDims = nNumTotalDims;
-            
-            % - Translate colon indexing
-            if (iscolon(S.subs{1}))
-               S.subs{1} = (1:numel(mtVar))';
-            end
-            
-            % - Get equivalent subscripted indexes
-            vnTensorSize = size(mtVar);
-            [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
-            
-            % - Permute indices and convert back to linear indexing
-            vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-            
-            try
-               S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
-            catch
-               error('MappedTensor:badsubscript', ...
+         % - Catch "read entire stack" condition
+         if (~all(cellfun(@iscolon, S.subs)))
+            % - Handle different numbers of referencing dimensions
+            if (nNumDims == 1)
+               % - Translate from linear refs to indices
+               nNumDims = nNumTotalDims;
+               
+               % - Translate colon indexing
+               if (iscolon(S.subs{1}))
+                  S.subs{1} = (1:numel(mtVar))';
+               end
+               
+               % - Get equivalent subscripted indexes
+               [cIndices{1:nNumDims}] = ind2sub(vnReferencedTensorSize, S.subs{1});
+               
+               % - Permute indices and convert back to linear indexing
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+               
+               try
+                  S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
+               catch
+                  error('MappedTensor:badsubscript', ...
                      '*** MappedTensor: Subscript out of range.');
+               end
+               
+            elseif (nNumDims < nNumTotalDims)
+               % - Wrap up trailing dimensions, matlab style, using linear indexing
+               vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
+               vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
+               
+               % - Inverse permute index order
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder(vnInvOrder ~= 0));
+               S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+               
+            elseif (nNumDims == nNumTotalDims)
+               % - Simply permute and access tensor
+               
+               % - Permute index order
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+               S.subs = S.subs(vnInvOrder);
+               
+            else % (nNumDims > nNumTotalDims)
+               % - Check for non-colon references
+               vbNonColon = ~cellfun(@iscolon, S.subs);
+               
+               % - Check only trailing dimensions
+               vbNonColon(1:nNumTotalDims) = false;
+               
+               % - Check trailing dimensions for non-'1' indices
+               if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
+                  % - This is an error
+                  error('MappedTensor:badsubscript', ...
+                     '*** MappedTensor: Subscript out of range.');
+               end
+               
+               % - Permute index order
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+               S.subs = S.subs(vnInvOrder);
             end
-            
-         elseif (nNumDims < nNumTotalDims)
-            % - Wrap up trailing dimensions, matlab style, using linear indexing
-            vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
-            vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
-            
-            % - Inverse permute index order
-            vnInvOrder(mtVar.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
-            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder(vnInvOrder ~= 0));
-            S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
-            
-         elseif (nNumDims == nNumTotalDims)
-            % - Simply permute and access tensor
-            
-            % - Permute index order
-            vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-            S.subs = S.subs(vnInvOrder);
-            
-         else % (nNumDims > nNumTotalDims)
-            % - Check for non-colon references
-            vbNonColon = ~cellfun(@iscolon, S.subs);
-            
-            % - Check only trailing dimensions
-            vbNonColon(1:nNumTotalDims) = false;
-            
-            % - Check trailing dimensions for non-'1' indices
-            if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
-               % - This is an error
-               error('MappedTensor:badsubscript', ...
-                  '*** MappedTensor: Subscript out of range.');
-            end
-            
-            % - Permute index order
-            vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-            vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-            S.subs = S.subs(vnInvOrder);            
          end
          
          % - Reference the tensor data element
@@ -429,7 +438,10 @@ classdef MappedTensor < handle
          
          % - Reshape return data to concatenate trailing dimensions (just as
          % matlab does)
-         if (nNumDims < nNumTotalDims)
+         if (nNumDims == 1)
+            tfData = reshape(tfData, [], 1);
+            
+         elseif (nNumDims < nNumTotalDims)
             cnSize = num2cell(size(tfData));
             tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
          end
@@ -442,10 +454,14 @@ classdef MappedTensor < handle
       
       % subsasgn - METHOD Overloaded subsasgn
       function [mtVar] = subsasgn(mtVar, subs, tfData)
+         % - Test read-only status if tensor
+         if (mtVar.bReadOnly)
+            error('MappedTensor:ReadProtect', '*** MappedTensor: Attempted write to a read-only tensor.');
+         end
+         
          % - Test real/complex nature of input and current tensor
          if (~isreal(tfData))
             % - The input data is complex
-            
             if (~mtVar.bIsComplex)
                make_complex(mtVar);
             end
@@ -498,6 +514,7 @@ classdef MappedTensor < handle
             end
             
             % - Return the specified dimension(s)
+            vnSize(end+1:max(vnDimensions)) = 1;
             vnSize = vnSize(vnDimensions);
          end
          
@@ -572,6 +589,36 @@ classdef MappedTensor < handle
       % isreal - METHOD Overloaded isreal function
       function [bIsReal] = isreal(mtVar)
          bIsReal = ~mtVar.bIsComplex;
+      end
+      
+      % islogical - METHOD Overloaded islogical function
+      function [bIsLogical] = islogical(mtVar)
+         bIsLogical = isequal(mtVar.strClass, 'logical');
+      end
+      
+      % isnumeric - METHOD Overloaded isnumeric function
+      function [bIsNumeric] = isnumeric(mtVar)
+         bIsNumeric = ~islogical(mtVar);
+      end
+      
+      % isscalar - METHOD Overloaded isscalar function
+      function [bIsScalar] = isscalar(mtVar)
+         bIsScalar = numel(mtVar) == 1;
+      end
+      
+      % ismatrix - METHOD Overloaded ismatrix function
+      function [bIsMatrix] = ismatrix(mtVar)
+         bIsMatrix = ~isscalar(mtVar);
+      end
+      
+      % ischar - METHOD Overloaded ischar function
+      function [bIsChar] = ischar(mtVar)
+         bIsChar = isequal(mtVar.strClass, 'char');
+      end
+      
+      % isnan - METHOD Overloaded isnan function
+      function [bIsNan] = isnan(mtVar) %#ok<MANU>
+         bIsNan = false;
       end
       
       %% Overloaded methods (uminus, uplus, times, mtimes, ldivide, rdivide, mldivide, mrdivide)
@@ -876,7 +923,7 @@ classdef MappedTensor < handle
          % - Which dimension should we go along?
          if (nargin < 3)
             % - Find the first non-singleton dimension
-            [nul, nDim] = find(vnSize > 1, 1, 'first');
+            [nul, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
          else
             nDim = varargin{2};
          end
@@ -905,7 +952,7 @@ classdef MappedTensor < handle
          % - Which dimension should we go along?
          if (nargin < 3)
             % - Find the first non-singleton dimension
-            [nul, nDim] = find(vnSize > 1, 1, 'first');
+            [nul, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
          else
             nDim = varargin{2};
          end
@@ -921,11 +968,11 @@ classdef MappedTensor < handle
       end
       
       %% SliceFunction - METHOD Execute a function on the entire tensor, in slices
-      function [mtNewVar] = SliceFunction(mtVar, fhFunction, nSliceDim, vnSliceSize, varargin)
+      function [mtNewVar] = SliceFunction(mtVar, fhFunction, nSliceDim, vnSliceSize, bWriteOnly, varargin)
          % SliceFunction - METHOD Execute a function on the entire tensor, in slices
          %
          % Usage: [<mtNewVar>] = SliceFunction(mtVar,
-         %           fhFunctionHandle, nSliceDim <, vnSliceSize,> ...)
+         %           fhFunctionHandle, nSliceDim <, vnSliceSize, bWriteOnly,> ...)
          %
          % 'mtVar' is a MappedTensor.  This tensor will be sliced up along
          % dimensions 'nSliceDim', with each slice passed individually to
@@ -1011,6 +1058,14 @@ classdef MappedTensor < handle
             end
          end
          
+         % - Do we need to read from the source tensor, or does the slice
+         % function only write?
+         if (nargin(fhFunction) == 0) || exist('bWriteOnly', 'var') || (bWriteOnly == true)
+            bWriteOnly = true;
+         else
+            bWriteOnly = false;
+         end
+         
          % - If an explicit return argument is requested, construct a new tensor
          if (nargout == 1)
             bNewTensor = true;
@@ -1075,8 +1130,14 @@ classdef MappedTensor < handle
             mnTheseDestChunks = bsxfun(@plus, mnDestChunkIndices, [(nIndex-1) * nDestWindowStep 0 0]);
             
             % - Handle a "slice assign" function with no input arguments efficiently
-            if (nargin(fhFunction) == 0)
-               tData = fhFunction();
+            if (bWriteOnly)
+               % - Call function
+               if (nargin(fhFunction) == 0)
+                  tData = fhFunction();
+               else
+                  tData = fhFunction([], nIndex, varargin{:});
+               end
+               
                mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                
             else
@@ -1539,31 +1600,52 @@ end
 
 % mt_read_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
 function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, bBigEndian, hRepSumFunc, hChunkLengthFunc)
+
+   % - Catch "read whole tensor" condition
+   if (all(cellfun(@iscolon, sSubs.subs)))
+      % - Read data
+      tData = hShimFunc('read_all', hDataFile, vnTensorSize, ...
+         strClass, nHeaderBytes, double(bBigEndian));
+            
+      % - Reshape stack and return
+      tData = reshape(tData, vnTensorSize);
+      return;
+   end
+
    % - Check referencing and convert to linear indices
    [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize, hRepSumFunc);
    
    % - Maximise chunk probability and minimise number of reads by reading
    % only sorted unique entries
-   [vnUniqueIndices, nul, vnReverseSort] = unique_accel(vnLinearIndices);
+   [vnLinearIndices, nul, vnReverseSort] = unique_accel(vnLinearIndices); %#ok<ASGLU>
    
    % - Split into readable chunks
-   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices, hChunkLengthFunc);
+   mnFileChunkIndices = SplitFileChunks(vnLinearIndices, hChunkLengthFunc);
 
    % - Call shim read function
-   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, double(bBigEndian));
+   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnLinearIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, double(bBigEndian));
 end
 
 % mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
 function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData, bBigEndian, hRepSumFunc, hChunkLengthFunc)
+
+   % - Catch "read whole tensor" condition
+   if (all(cellfun(@iscolon, sSubs.subs)))
+      % - Write data and return
+      hShimFunc('write_all', hDataFile, vnTensorSize, ...
+         strClass, nHeaderBytes, cast(tData, strClass), double(bBigEndian));
+      return;
+   end
+
    % - Check referencing and convert to linear indices
    [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(sSubs.subs, vnTensorSize, hRepSumFunc);
    
    % - Maximise chunk probability and minimise number of writes by writing
    % only sorted unique entries
-   [vnUniqueIndices, vnUniqueDataIndices] = unique_accel(vnLinearIndices);
+   [vnLinearIndices, vnUniqueDataIndices] = unique_accel(vnLinearIndices);
 
    % - Split into readable chunks
-   mnFileChunkIndices = SplitFileChunks(vnUniqueIndices, hChunkLengthFunc);   
+   mnFileChunkIndices = SplitFileChunks(vnLinearIndices, hChunkLengthFunc);
    
    % - Call shim writing function
    hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, cast(tData, strClass), double(bBigEndian));
@@ -1686,9 +1768,14 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
    % - Find colon references
    vbIsColon = cellfun(@iscolon, cRefs);
    
+   % - Catch "reference whole stack" condition
    if (all(vbIsColon))
       vnLinearIndices = 1:prod(vnLims);
-      vnDimRefSizes = vnLims;
+      if (numel(cRefs) == 1)
+         vnDimRefSizes = [vnLims 1];
+      else
+         vnDimRefSizes = vnLims;
+      end
       return;
    end
    
@@ -1734,6 +1821,11 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
          vnLinearIndices(1:nThisWindowLength) = hRepSumFunc(vnLinearIndices(1:nCurrWindowLength), (cRefs{nDimension}-1) * vnDimOffsets(nDimension));
       end
    end
+   
+   if (numel(vnDimRefSizes) == 1) % && ~any(vbIsColon)
+      vnDimRefSizes = size(cRefs{1});
+   end
+   
 end
 
 % SplitFileChunks - FUNCTION Split a set of indices into contiguous chunks
@@ -1790,7 +1882,7 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
       case 'open'
          if (nargin == 2)
             [varargout{1}] = fopen(varargin{1}, 'r+');
-            [nul, nul, varargout{2}, nul] = fopen(varargout{1}); %#ok<NASGU>
+            [nul, nul, varargout{2}, nul] = fopen(varargout{1}); %#ok<ASGLU,NASGU>
          else
             varargout{1} = fopen(varargin{1}, 'r+', varargin{2});
          end
