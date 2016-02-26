@@ -1303,6 +1303,7 @@ function strFullPath = get_full_file_path(strFile)
    try
       fid = fopen(strFile);
       strFile = fopen(fid);
+      fclose(fid);
       
       [strDir, strName, strExt] = fileparts(strFile);
       
@@ -1315,6 +1316,11 @@ function strFullPath = get_full_file_path(strFile)
       end
       
    catch mErr
+      % - Close file id, if necessary
+      if (ismember(fid, fopen('all')))
+         fclose(fid);
+      end
+      
       % - Record error state
       base_ME = MException('TIFFStack:ReadError', ...
          '*** TIFFStack: Could not open file [%s].', strFile);
