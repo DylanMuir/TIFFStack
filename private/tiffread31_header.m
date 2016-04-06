@@ -308,7 +308,7 @@ switch( SampleFormat )
    case 2
       TIF.classname = sprintf('int%i', TIF.BitsPerSample(1));
    case 3
-      if ( TIF.BitsPerSample(plane_nb) == 32 )
+      if (TIF.BitsPerSample(1) == 32 )
          TIF.classname = 'single';
       else
          TIF.classname = 'double';
