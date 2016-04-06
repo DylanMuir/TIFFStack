@@ -123,6 +123,18 @@
 %
 % -------------------------------------------------------------------------
 %
+% ImageJ stacks
+%
+% ImageJ HyperStacks are automatically deinterleaved, if encountered. By
+% default, the stacks will be presented as [Y X T Z C]. They can of course
+% be permuted. If desired, the interleaving can be overridden by providing
+% an explicit 'vnInterleavedFrameDims'.
+%
+% ImageJ writes "fake" big stacks as raw binary data, with a TIF file shim
+% as a header. These appear to Matlab as a TIF file containing a single
+% frame. TIFFStack loads these files using MappedTensor, when available. If
+% MappedTensor is not available, a warning will be issued.
+%
 % References:
 % [1] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review Letters
 %        86: 3192-3195; 2001. DOI: 10.1103/PhysRevLett.86.3192
@@ -147,9 +159,10 @@ classdef TIFFStack < handle
       bForceTiffread       % - Force the use of tiffread, rather than trying to use TiffLib
       vnDataSize;          % - Cached size of the TIFF stack
       vnApparentSize;      % - Apparent size of the TIFF stack
-      TIF;                 % \_ Cached header info for tiffread29 speedups
+      TIF;                 % \_ Cached header info for tiffread31 speedups
       HEADER;              % /
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
+      bMTStack;            % - Flag indicating MappedTensor is being used
       fhReadFun;           % - When using Tiff class, function for reading data
       fhSetDirFun;         % - When using Tiff class, function for setting the directory
       vnDimensionOrder;    % - Internal dimensions order to support permutation
@@ -221,7 +234,35 @@ classdef TIFFStack < handle
             sInfo = imfinfo(strFilename);
             oStack.sImageInfo = sInfo;
 
-            if (oStack.bUseTiffLib)
+            % - Detect a ImageJ fake BigTIFF stack
+            [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(sInfo);
+            
+            % - Handle ImageJ big stacks with MappedTensor
+            if (bIsImageJBigStack)
+               [oStack.TIF, oStack.bMTStack, oStack.strDataClass] = OpenImageJBigStack(oStack, vnStackDims);
+               
+               % - Could we use a MappedTensor?
+               if (~oStack.bMTStack)
+                  % - No, so just access the first frame
+                  bIsImageJBigStack = false; %#ok<NASGU>
+                  bIsImageJHyperStack = false;
+                  
+                  warning('TIFFStack:ImageJBigStackUnsupported', ...
+                          '--- TIFFStack: This is an ImageJ "fake" TIF file. MappedTensor must be available to read this file.');
+               end
+            end
+            
+            % - Deinterleave hyperstacks automatically
+            if (bIsImageJHyperStack && isempty(vnInterleavedFrameDims))
+               vnInterleavedFrameDims = vnInterleavedIJFrameDims;
+            end
+            
+            % - Initialise object, depending on underlying access method
+            if (oStack.bMTStack)
+               % - Fix up stack size
+               sInfo = repmat(sInfo, vnStackDims(3), 1);
+               
+            elseif (oStack.bUseTiffLib)
                % - Create a Tiff object
                oStack.TIF = tifflib('open', strFilename, 'r');
                
@@ -341,7 +382,7 @@ classdef TIFFStack < handle
                end
                
             else
-               % - Read TIFF header for tiffread29
+               % - Read TIFF header for tiffread31
                [oStack.TIF, oStack.HEADER] = tiffread31_header(strFilename);
 
                % - Use tiffread29 to get the data class for this tiff
@@ -382,6 +423,11 @@ classdef TIFFStack < handle
             
             % - Initialise dimension order
             oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
+            
+            % - Fix up dimensions order for ImageJ HyperStack
+            if (bIsImageJHyperStack)
+               oStack = permute(oStack, [1 2 5 4 3]);
+            end
 
          catch mErr
             base_ME = MException('TIFFStack:InvalidFile', ...
@@ -504,9 +550,9 @@ classdef TIFFStack < handle
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZStackDims)) = 1:nNumNZStackDims;
-                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                   S.subs(nNumNZStackDims+1:nNumTotalStackDims) = {1};
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
+                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                   
                else % (nNumRefDims > nNumNZStackDims)
                   % - Check for non-colon references
@@ -576,12 +622,14 @@ classdef TIFFStack < handle
                      end
                      
                      % - Construct referencing subscripts for raw stack
-                     S.subs = [S.subs(1:2) {vnFrameIndices(:)} S.subs(end)];
+                     S.subs = [S.subs(1:2) reshape(vnFrameIndices, 1, []) S.subs(end)];
                   end
                end
 
-               % - Access stack (tifflib or tiffread)
-               if (oStack.bUseTiffLib)
+               % - Access stack (MappedTensor or tifflib or tiffread)
+               if (oStack.bMTStack)
+                  tfData = TS_read_data_MappedTensor(oStack, S.subs, bLinearIndexing);
+               elseif (oStack.bUseTiffLib)
                   tfData = TS_read_data_Tiff(oStack, S.subs, bLinearIndexing);
                else
                   tfData = TS_read_data_tiffread(oStack, S.subs, bLinearIndexing);
@@ -645,7 +693,7 @@ classdef TIFFStack < handle
          % - Trim trailing unitary dimensions
          vbIsUnitary = vnSize == 1;
          if (vbIsUnitary(end))
-            nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
+            nLastNonUnitary = numel(vnSize) - find(fliplr(vnSize) == 1, 1, 'last');
             if (nLastNonUnitary < numel(vnSize))
                vnSize = vnSize(1:nLastNonUnitary);
             end
@@ -987,6 +1035,74 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       tfData = oStack.sImageInfo(1).MaxSampleValue(1) - (tfData - oStack.sImageInfo(1).MinSampleValue(1));
    end
 end
+
+
+% TS_read_data_MappedTensor - FUNCTION Read the requested pixels from an ImageJ fake binary TIFF file (using MappedTensor)
+%
+% Usage: [tfData] = TS_read_data_MappedTensor(oStack, cIndices)
+%
+% 'oStack' is a TIFFStack.  'cIndices' are the indices passed in from subsref.
+% Colon indexing will be converted to full range indexing.  cIndices is a cell
+% array with the format {rows, cols, frames, slices}.  Slices are RGB or CMYK
+% or so on.
+
+function [tfData] = TS_read_data_MappedTensor(oStack, cIndices, bLinearIndexing)
+
+   % - Fix up subsample detection for unitary dimensions
+   vbIsColon = cellfun(@iscolon, cIndices);
+   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices(~vbIsColon));
+   vbIsColon(~vbIsColon) = vbIsOne & (oStack.vnDataSize(~vbIsColon) == 1);
+   
+   % - Check ranges
+   vnMinRange = cellfun(@(c)(min(c(:))), cIndices(~vbIsColon));
+   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
+   
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
+      error('TIFFStack:badsubscript', ...
+         '*** TIFFStack: Index exceeds stack dimensions.');
+   end
+   
+   % - Handle linear or subscript indexing
+   if (~bLinearIndexing)
+      
+      try
+         % - Just read using MappedTensor
+         tfData = oStack.TIF(cIndices{1:end});
+         
+      catch mErr
+         % - Record error state
+         base_ME = MException('TIFFStack:ReadError', ...
+            '*** TIFFStack: Could not read data from image file.');
+         new_ME = addCause(base_ME, mErr);
+         throw(new_ME);
+      end
+           
+   else
+      % -- Linear indexing
+      
+      % - Convert frame indices back to stack-linear
+      vnStackLinearIndices = sub2ind(oStack.vnDataSize, cIndices{:});
+      
+      % - Loop over images in stack and extract required frames
+      try
+         % - Just read using MappedTensor
+         tfData = oStack.TIF(vnStackLinearIndices);
+         
+      catch mErr
+         % - Record error state
+         base_ME = MException('TIFFStack:ReadError', ...
+            '*** TIFFStack: Could not read data from image file.');
+         new_ME = addCause(base_ME, mErr);
+         throw(new_ME);
+      end
+   end
+   
+   % - Invert data if requested
+   if (oStack.bInvert)
+      tfData = oStack.sImageInfo(1).MaxSampleValue(1) - (tfData - oStack.sImageInfo(1).MinSampleValue(1));
+   end
+end
+
 
 % GetLinearIndicesForRefs - FUNCTION Convert a set of multi-dimensional indices directly into linear indices
 function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLims, hRepSumFunc)
@@ -1334,8 +1450,6 @@ function bIsColon = iscolon(ref)
    bIsColon = ischar(ref) && isequal(ref, ':');
 end
 
-% --- END of TIFFStack.m ---
-
 %% -- MEX-handling functions
 
 function [hRepSumFunc] = GetMexFunctionHandles
@@ -1367,3 +1481,69 @@ function [hRepSumFunc] = GetMexFunctionHandles
       hRepSumFunc = @mapped_tensor_repsum_nomex;
    end
 end
+
+%% -- ImageJ helper functions
+
+function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFrameDims] = IsImageJBigStack(sInfo)
+   bIsImageJBigStack = false;
+   bIsImageJHyperStack = false;
+   strImageDesc = sInfo(1).ImageDescription;
+   
+   % - Look for ImageJ version information
+   strImageJVer = sscanf(strImageDesc(strfind(strImageDesc, 'ImageJ='):end), 'ImageJ=%s');
+   
+   % - Look for stack size information
+   if (~isempty(strImageJVer))
+      nNumImages = sscanf(strImageDesc(strfind(strImageDesc, 'images='):end), 'images=%d');
+      
+      % - Does ImageJ report a greater number of images than sInfo?
+      if (~isempty(nNumImages) && (numel(sInfo) ~= nNumImages))
+         bIsImageJBigStack = true;
+      end
+      
+      % - Is this a hyperstack?
+      strHyperStack = sscanf(strImageDesc(strfind(strImageDesc, 'hyperstack='):end), 'hyperstack=%s');
+      
+      if (strcmpi(strHyperStack, 'true'))
+         bIsImageJHyperStack = true;
+         
+         % - Extract information about the stack size for a hyperstack
+         nNumChannels = sscanf(strImageDesc(strfind(strImageDesc, 'channels='):end), 'channels=%d');
+         nNumSlices = sscanf(strImageDesc(strfind(strImageDesc, 'slices='):end), 'slices=%d');
+         nNumFrames = sscanf(strImageDesc(strfind(strImageDesc, 'frames='):end), 'frames=%d');
+         
+         % - Deinterleave stack
+         vnStackDims = [sInfo(1).Height sInfo(1).Width nNumFrames*nNumSlices*nNumChannels 1];
+         vnInterleavedFrameDims = [nNumChannels nNumSlices nNumFrames];
+         
+      else
+         % - Extract information about the stack size for a fake big stack
+         vnStackDims = [sInfo(1).Height sInfo(1).Width nNumImages sInfo(1).SamplesPerPixel];
+         vnInterleavedFrameDims = [];
+      end
+         
+   else
+      % - Just use the proper TIFF header
+      vnStackDims = [];
+      vnInterleavedFrameDims = [];
+   end
+end
+
+function [mtHandle, bUseMappedTensor, strDataClass] = OpenImageJBigStack(oStack, vnStackDims)
+   bUseMappedTensor = (exist('MappedTensor', 'class') == 8);
+   mtHandle = [];
+   strDataClass = [];
+   
+   if (bUseMappedTensor)
+      % - Use tiffread to get file information
+      [TIF, HEADER] = tiffread31_header(oStack.strFilename);
+      
+      % - Use MappedTensor to open the file
+      strDataClass = TIF.classname;
+      mtHandle = MappedTensor(oStack.strFilename, vnStackDims, ...
+         'MachineFormat', TIF.ByteOrder, 'Class', strDataClass, 'HeaderBytes', HEADER.StripOffsets);
+   end
+end
+
+% --- END of TIFFStack.m ---
+
