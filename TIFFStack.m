@@ -1485,8 +1485,19 @@ end
 %% -- ImageJ helper functions
 
 function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFrameDims] = IsImageJBigStack(sInfo)
+
+   % - Set up default return arguments
    bIsImageJBigStack = false;
    bIsImageJHyperStack = false;
+   vnStackDims = [];
+   vnInterleavedFrameDims = [];
+   
+   % - Check for ImageDescription field
+   if (~isfield(sInfo, 'ImageDescription'))
+      return;
+   end
+   
+   % - Get image description
    strImageDesc = sInfo(1).ImageDescription;
    
    % - Look for ImageJ version information
@@ -1521,11 +1532,6 @@ function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFram
          vnStackDims = [sInfo(1).Height sInfo(1).Width nNumImages sInfo(1).SamplesPerPixel];
          vnInterleavedFrameDims = [];
       end
-         
-   else
-      % - Just use the proper TIFF header
-      vnStackDims = [];
-      vnInterleavedFrameDims = [];
    end
 end
 
