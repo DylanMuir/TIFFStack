@@ -336,7 +336,10 @@ classdef TIFFStack < handle
                      error('TIFFStack:UnsupportedFormat', ...
                            '*** TIFFStack: The sample format of this TIFF stack is not supported.');
                end
-                              
+               
+               % -- Assign casting function
+               oStack.fhCastFun = str2func(oStack.strDataClass);
+               
                % -- Assign accelerated reading function
                strReadFun = 'TS_read_Tiff';
                
@@ -391,9 +394,6 @@ classdef TIFFStack < handle
             % - Use imread to get the data class for this tiff
             % fPixel = imread(strFilename, 'TIFF', 1, 'PixelRegion', {[1 1], [1 1]});
             % oStack.strDataClass = class(fPixel);
-            
-            % -- Assign casting function
-            oStack.fhCastFun = str2func(oStack.strDataClass);
             
             % - Record stack size
             oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
@@ -676,12 +676,12 @@ classdef TIFFStack < handle
          strDataClass = oStack.strDataClass;
       end
       
-%% --- Overloaded numel, size, ndims, permute, ipermute, ctranspose, transpose, cat, horzcat, vertcat
+      
+%% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose, cat, horzcat, vertcat
       function [n] = numel(oStack, varargin)
          n = prod(size(oStack)); %#ok<PSIZE>
       end
 
-      % size - METHOD Overloaded size function
       function [varargout] = size(oStack, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
          vnApparentSize = oStack.vnApparentSize; %#ok<PROP>
@@ -738,11 +738,6 @@ classdef TIFFStack < handle
          end
       end
       
-      % ndims - METHOD Overloaded ndims function
-      function [nNumDims] = ndims(oStack)
-         nNumDims = numel(size(oStack));
-      end
-      
       % permute - METHOD Overloaded permute function
       function [oStack] = permute(oStack, vnNewOrder)
          oStack.vnDimensionOrder(1:numel(vnNewOrder)) = oStack.vnDimensionOrder(vnNewOrder);
@@ -791,227 +786,6 @@ classdef TIFFStack < handle
          end
       end
 
-%% --- Overloaded sum, nansum, mean, nanmean
-
-      % sum - METHOD Overloaded sum function
-      function [tfResult, tnNumNonNaNs] = sum(oStack, nDim, flag, bIgnoreNaNs)
-         % - If this function is called, it must be a sum over the entire stack
-         if nargin==2 && ischar(nDim)
-            flag = nDim;
-         elseif nargin < 3
-            flag = 'default';
-         end
-         
-         if nargin == 1 || (nargin == 2 && ischar(nDim))
-            nDim = find(size(oStack)~=1,1);
-            if isempty(nDim), nDim = 1; end
-         end
-         
-         if (~exist('bIgnoreNaNs', 'var'))
-            bIgnoreNaNs = true;
-         end
-         
-         % - Set up referencing
-         sSubs.type = '()';
-         sSubs.subs = repmat({':'}, 1, ndims(oStack));
-         
-         % - Loop to perform sum in double precision
-         for (nIndex = 1:size(oStack, nDim))
-            sSubs.subs{nDim} = nIndex;
-            tfSlice = double(subsref(oStack, sSubs));
-
-            % - Ignore NaNs, if requested
-            if (bIgnoreNaNs)
-               if (~exist('tnNumNonNaNs', 'var'))
-                  tnNumNonNaNs = zeros(size(tfSlice));
-               end
-               
-               tnNumNonNaNs(~isnan(tfSlice)) = tnNumNonNaNs(~isnan(tfSlice)) + 1;
-               
-               % - Set NaNs to zero
-               tfSlice(isnan(tfSlice)) = 0;
-            end
-            
-            % - Perform sum
-            if (~exist('tfResult', 'var'))
-               tfResult = tfSlice;
-            else
-               tfResult = tfResult + tfSlice;
-            end
-         end
-         
-         % - Cast result to native class, if necessary
-         if (strcmp(flag, 'native'))
-            tfResult = oStack.fhCastFun(tfResult);
-         end
-      end
-      
-      % nansum - METHOD Overloaded nansum function
-      function tfResult = nansum(oStack, nDim)
-         if nargin == 1
-            nDim = find(size(oStack)~=1,1);
-            if isempty(nDim), nDim = 1; end
-         end
-         
-         % - Call "sum" with "bIgnoreNaNs" set to true
-         tfResult = sum(oStack, nDim, 'default', true);
-      end
-         
-      % mean - METHOD Overloaded mean function
-      function y = mean(x,dim,flag, bIgnoreNaNs)
-         
-         if (~exist('bIgnoreNaNs', 'var'))
-            bIgnoreNaNs = true;
-         end
-         
-         if nargin==2 && ischar(dim)
-            flag = dim;
-         elseif nargin < 3
-            flag = 'default';
-         end
-         
-         if nargin == 1 || (nargin == 2 && ischar(dim))
-            dim = find(size(x)~=1,1);
-            if isempty(dim), dim = 1; end
-         end
-         
-         % - Compute sum in double
-         [y, tnNumNonNaNs] = sum(x, dim, 'double', bIgnoreNaNs);
-         y = y ./ tnNumNonNaNs;
-         
-         % - Re-cast result, if necessary
-         if (strcmp(flag, 'native'))
-            y = x.fhCastFun(y);
-         end
-      end
-      
-      % nanmean - METHOD Overloaded nanmean
-      function y = nanmean(x,dim)
-         if nargin == 1
-            dim = find(size(x)~=1,1);
-            if isempty(dim), dim = 1; end
-         end
-         
-         % - Call mean
-         y = mean(x,dim,'default', true);
-      end
-      
-%% --- Overloaded sort, prctile
-
-      % sort - METHOD Overloaded sort function
-      function tfSorted = sort(oStack, varargin)
-         % - Warn about loss of function 
-         warning('TIFFStack:LostTIFFStack', '--- TIFFStack/sort: Warning: Data returned by ''sort'' is no longer a ''TIFFStack'' object.');
-         
-         % - Set up referencing
-         sSubs.type = '()';
-         sSubs.subs = repmat({':'}, 1, ndims(oStack));
-         
-         % - Just load stack and pass parameters to sort
-         tfSorted = sort(subsref(oStack, sSubs), varargin{:});
-      end
-      
-      % prctile - METHOD Overloaded prctile function
-      function tfPrctile = prctile(oStack, varargin)
-         % - Warn about loss of function 
-         warning('TIFFStack:LostTIFFStack', '--- TIFFStack/prctile: Warning: Data returned by ''prctile'' is no longer a ''TIFFStack'' object.');
-         
-         % - Set up referencing
-         sSubs.type = '()';
-         sSubs.subs = repmat({':'}, 1, ndims(oStack));
-         
-         % - Just load stack and pass parameters to sort
-         tfPrctile = prctile(subsref(oStack, sSubs), varargin{:});         
-      end
-
-%% --- Overloaded cast methods
-
-      % cast - METHOD Overloaded cast function
-      function tfStack = cast(oStack, strClass, oTemplate)
-         if (nargin == 3) && (strcmp(strClass, 'like'))
-            strClass = class(oTemplate);
-         end
-         
-         % - Construct a casting function
-         fhCastFun = str2func(strClass); %#ok<PROP>
-         
-         % - Set up referencing
-         sSubs.type = '()';
-         sSubs.subs = repmat({':'}, 1, ndims(oStack));
-
-         % - Load the entire stack
-         tfStack = subsref(oStack, sSubs);
-         
-         % - Cast the result
-         tfStack = fhCastFun(tfStack); %#ok<PROP>
-      end
-
-      function tfStack = double(oStack)
-         tfStack = cast(oStack, 'double');
-      end
-      
-      function tfStack = single(oStack)
-         tfStack = cast(oStack, 'single');
-      end
-      
-      function tfStack = int8(oStack)
-         tfStack = cast(oStack, 'int8');
-      end
-         
-      function tfStack = int16(oStack)
-         tfStack = cast(oStack, 'int16');
-      end
-         
-      function tfStack = int32(oStack)
-         tfStack = cast(oStack, 'int16');
-      end
-
-      function tfStack = int64(oStack)
-         tfStack = cast(oStack, 'int16');
-      end
-      
-      function tfStack = uint8(oStack)
-         tfStack = cast(oStack, 'int8');
-      end
-         
-      function tfStack = uint16(oStack)
-         tfStack = cast(oStack, 'int16');
-      end
-         
-      function tfStack = uint32(oStack)
-         tfStack = cast(oStack, 'int16');
-      end
-
-      function tfStack = uint64(oStack)
-         tfStack = cast(oStack, 'int16');
-      end
-      
-%% --- Overloaded test methods
-
-      function bIsNumeric = isnumeric(~)
-         bIsNumeric = true;
-      end
-      
-      function bIsFloat = isfloat(oStack)
-         switch (oStack.strDataClass)
-            case {'single', 'double'}
-               bIsFloat = true;
-               
-            otherwise
-               bIsFloat = false;
-         end
-      end
-      
-      function bIsInteger = isinteger(oStack)
-         switch (oStack.strDataClass)
-            case {'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64'}
-               bIsInteger = true;
-               
-            otherwise
-               bIsInteger = false;
-         end
-      end
-            
 %% --- Property accessors
 
       % set.bInvert - SETTER method for 'bInvert'
@@ -1024,7 +798,8 @@ classdef TIFFStack < handle
             % - Assign bInvert value
             oStack.bInvert = bInvert;
          end
-      end            
+      end
+            
       
 %% --- Overloaded save method
       % saveobj - Save method
@@ -1036,6 +811,23 @@ classdef TIFFStack < handle
          warning(w);
       end
       
+   end
+
+%% -- Overloaded load method
+
+   methods (Static)
+      
+      % loadobj - Load method
+      function oStack = loadobj(sSavedVar)
+         % - Create a new TIFFStack
+         oStack = TIFFStack(sSavedVar.strFilename, sSavedVar.bInvert, [], ...
+                            sSavedVar.bForceTiffread);
+
+         % - Adjust dimensions to look like saved stack
+         oStack.vnApparentSize = sSavedVar.vnApparentSize;
+         oStack.vnDimensionOrder = sSavedVar.vnDimensionOrder;
+      end
+
    end
 
 %% -- Overloaded load method

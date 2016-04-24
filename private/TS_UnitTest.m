@@ -122,6 +122,7 @@ function TS_UnitTest(strFilename)
    disp('--- TS_UnitTest: Unit tests for ''TIFFStack'' passed.');
 end
 
+
 function TSUT_TestReferencing(tsStack, tfStack, strTestName)
    % - Test stack sizes
    assert(isequal(size(tsStack), size(tfStack)), ...
@@ -135,9 +136,6 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
    assert(isequal(size(tsStack, 4), size(tfStack, 4)), ...
           'TIFFStack:UnitTestFailed', 'The result of calling ''size'' was not equal between the two stacks.');
 
-   % - Test overloaded functions
-   TSUT_TestOverloads(tsStack, tfStack, strTestName);
-       
    % - Test referencing entire stack
    TSUT_compareRef(':');
    TSUT_compareRef(':', ':');
@@ -267,35 +265,6 @@ function TSUT_TestReferencing(tsStack, tfStack, strTestName)
             TSUT_subs2str(varargin), strTestName, strErrorID);
    end
 end
-
-function TSUT_TestOverloads(tsStack, tfStack, strTestName)
-
-   TSUT_TO_TestOverload(@sum);
-   TSUT_TO_TestOverload(@nansum);
-   TSUT_TO_TestOverload(@mean);
-   TSUT_TO_TestOverload(@nanmean);
-
-   function TSUT_TO_TestOverload(fhFun)
-      assert(isequal(fhFun(tsStack), fhFun(tfStack)), ...
-         'TIFFStack:UnitTestFailed', 'The result of called [%s] was not equal between the two stacks, during test [%s]', ...
-         func2str(fhFun), strTestName);
-      assert(isequal(fhFun(tsStack, 3), fhFun(tfStack, 3)), ...
-         'TIFFStack:UnitTestFailed', 'The result of called [%s(x, 3)] was not equal between the two stacks, during test [%s]', ...
-         func2str(fhFun), strTestName);
-
-      % - Test 'flag' argument for sum and mean
-      if (~isequal(fhFun, @nansum) && ~isequal(fhFun, @nanmean))
-         assert(isequal(fhFun(tsStack, 'native'), fhFun(tfStack, 'native')), ...
-            'TIFFStack:UnitTestFailed', 'The result of called [%s(x, ''native'')] was not equal between the two stacks, during test [%s]', ...
-            func2str(fhFun), strTestName);
-         assert(isequal(fhFun(tsStack, 3, 'native'), fhFun(tfStack, 3, 'native')), ...
-            'TIFFStack:UnitTestFailed', 'The result of called [%s(x, 3, ''native''] was not equal between the two stacks, during test [%s]', ...
-            func2str(fhFun), strTestName);
-      end
-   end
-
-end
-
 
 % - Function to test errors with invalid references
 function TSUT_assertFail(strErrorID, strCommand)
