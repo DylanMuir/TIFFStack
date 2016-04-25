@@ -31,7 +31,7 @@
    #define  bool  uint8_t
    #define  true  1
    #define  false 0        
-   #define  UINT64_C(c) c ## ULL
+   #define  UINT64_C(c) c ## i64
 #else
    #define  FILE_FORCE_BINARY
 #endif
