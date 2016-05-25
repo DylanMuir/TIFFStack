@@ -229,7 +229,7 @@ classdef TIFFStack < handle
          oStack.strFilename = strFilename;
          
          % - Get image information
-%          try
+         try
             % - Read and save image information (using tiffread for speed and compatibility)
             [~, sInfo] = tiffread31_info(strFilename);
 
@@ -448,12 +448,12 @@ classdef TIFFStack < handle
             % - Record image information
             oStack.sImageInfo = sInfo;
             
-%          catch mErr
-%             base_ME = MException('TIFFStack:InvalidFile', ...
-%                   '*** TIFFStack: Could not open file [%s].', strFilename);
-%             new_ME = addCause(base_ME, mErr);
-%             throw(new_ME);
-%          end
+         catch mErr
+            base_ME = MException('TIFFStack:InvalidFile', ...
+                  '*** TIFFStack: Could not open file [%s].', strFilename);
+            new_ME = addCause(base_ME, mErr);
+            throw(new_ME);
+         end
       end
       
       % delete - DESTRUCTOR
