@@ -230,9 +230,8 @@ classdef TIFFStack < handle
          
          % - Get image information
          try
-            % - Read and save image information
-            sInfo = imfinfo(strFilename);
-            oStack.sImageInfo = sInfo;
+            % - Read and save image information (using tiffread for speed and compatibility)
+            [~, sInfo] = tiffread31_info(strFilename);
 
             % - Detect a ImageJ fake BigTIFF stack
             [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(sInfo);
@@ -374,9 +373,26 @@ classdef TIFFStack < handle
                % - Fix up rows per strip (inconsistency between Windows and
                % OS X Tifflib
                nRowsPerStrip = TiffgetTag(oStack.TIF, 'RowsPerStrip');
-               if (nRowsPerStrip ~= oStack.sImageInfo(1).RowsPerStrip)
-                   [oStack.sImageInfo.RowsPerStrip] = deal(nRowsPerStrip);
+               if (nRowsPerStrip ~= sInfo(1).RowsPerStrip)
+                   [sInfo.RowsPerStrip] = deal(nRowsPerStrip);
                end
+               
+               % - Attempt to read tile width and length
+               try
+                  [sInfo.TileWidth] = deal(TiffgetTag(oStack.TIF, 'TileWidth'));
+               catch
+                  [sInfo.TileWidth] = deal(1);
+               end
+               
+               try
+                  [sInfo.TileLength] = deal(TiffgetTag(oStack.TIF, 'TileLength'));
+               catch
+                  [sInfo.TileLength] = deal(1);
+               end
+               
+               % - Read max and min sample values
+               [sInfo.MaxSampleValue] = deal(TiffgetTag(oStack.TIF, 'MaxSampleValue'));
+               [sInfo.MinSampleValue] = deal(TiffgetTag(oStack.TIF, 'MinSampleValue'));
                
             else
                % - Read TIFF header for tiffread31
@@ -429,6 +445,9 @@ classdef TIFFStack < handle
                oStack = permute(oStack, [1 2 5 4 3]);
             end
 
+            % - Record image information
+            oStack.sImageInfo = sInfo;
+            
          catch mErr
             base_ME = MException('TIFFStack:InvalidFile', ...
                   '*** TIFFStack: Could not open file [%s].', strFilename);
@@ -461,11 +480,18 @@ classdef TIFFStack < handle
          fprintf('   vnApparentSize: ['); fprintf('%d ', oStack.vnApparentSize); fprintf(']\n');
          fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
          fprintf('   bUseTiffLib: %d\n', oStack.bUseTiffLib);
+         fprintf('   bMTStack: %d\n', oStack.bMTStack);
          fprintf('   fhReadFun: %s\n', func2str(oStack.fhReadFun));
          fprintf('   fhSetDirFun: %s\n', func2str(oStack.fhSetDirFun));
          fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
          fprintf('   fhCastFun: %s\n', func2str(oStack.fhCastFun));
       end
+      
+      function [TIF, HEADER] = diagnostic_HEADER(oStack)
+         TIF = oStack.TIF;
+         HEADER = oStack.HEADER;
+      end
+         
 
 %% --- Overloaded subsref
 
@@ -1052,24 +1078,6 @@ classdef TIFFStack < handle
          oStack.vnApparentSize = sSavedVar.vnApparentSize;
          oStack.vnDimensionOrder = sSavedVar.vnDimensionOrder;
       end
-
-   end
-
-%% -- Overloaded load method
-
-   methods (Static)
-      
-      % loadobj - Load method
-      function oStack = loadobj(sSavedVar)
-         % - Create a new TIFFStack
-         oStack = TIFFStack(sSavedVar.strFilename, sSavedVar.bInvert, [], ...
-                            sSavedVar.bForceTiffread);
-
-         % - Adjust dimensions to look like saved stack
-         oStack.vnApparentSize = sSavedVar.vnApparentSize;
-         oStack.vnDimensionOrder = sSavedVar.vnDimensionOrder;
-      end
-
    end
 end
 
