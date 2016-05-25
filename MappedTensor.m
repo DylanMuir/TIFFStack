@@ -74,9 +74,13 @@
 % Transposition just swaps the first two dimensions, leaving the trailing
 % dimensions unpermuted.
 %
-% Unary plus (+A) and minus (-A) are supported.  Binary plus (A+B), minus (A-B),
-% times (A*B, A.*B) as long as one of A or B is a scalar.  Divide (A/B,
-% A./B, B\A, B.\A) is supported, as long as B is a scalar.
+% Unary plus (+A) and minus (-A) are supported.  Binary plus (A+B) and
+% minus (A-B) are not supported, since they require a full load of the
+% tensor to implement. Perform addition or subtraction on a referenced
+% portion of the tensor, or use SliceFunction to perform the operation.
+% Multiplication using times (A*B, A.*B) is supported as long as one of A
+% or B is a scalar.  Divide (A/B, A./B, B\A, B.\A) is supported, as long as
+% B is a scalar.
 %
 % Transparent casting to other classes is supported in O(1) time. Note that
 % due to transparent casting and tranparent O(1) scaling, rounding may
@@ -856,67 +860,15 @@ classdef MappedTensor < handle
       %% Overloaded methods (plus, minus)
       
       % plus - METHOD Overloaded binary 'plus' operator (A+B)
-      function [mtVar] = plus(varargin)
-         % - Are the inputs numeric?
-         vbIsNumeric = cellfun(@isnumeric, varargin);
-         
-         % - Are the inputs scalar?
-         vbIsScalar = cellfun(@isscalar, varargin);
-         
-         % - Are the inputs of class MappedTensor
-         vbIsTensor = cellfun(@(o)(isa(o, 'MappedTensor')), varargin);
-         
-         % - Can we perform the operation?
-         if (nnz(vbIsNumeric & vbIsScalar & ~vbIsTensor) ~= 1)
-            error('MappedTensor:InvalidPlusOperands', ...
-                  '*** MappedTensor: ''plus'' (A+B) is only supported for a MappedTensor object and a scalar.');
-         end
-         
-         % - Get the scalar value
-         fScalar = varargin{vbIsNumeric & vbIsScalar};
-         mtVar = varargin{vbIsTensor};
-         
-         % - Find a dimension to slice along
-         vnTensorSize = size(mtVar);
-         nSliceDim = numel(vnTensorSize);
-
-         % - Perform the addition slice-wise
-         fhAddition = @(tSlice)(tSlice + fScalar);
-         SliceFunction(mtVar, fhAddition, nSliceDim);
+      function [varargout] = plus(varargin) %#ok<STOUT>
+         error('MappedTensor:NotImplemented', ...
+            '*** MappedTensor: ''plus'' (A+B) must be performed on a referenced portion of the tensor, or else explicitly with ''SliceFunction''.');
       end
       
       % minus - METHOD Overloaded binary 'minus' operator (A-B)
-      function [mtVar] = minus(varargin)
-         % - Are the inputs numeric?
-         vbIsNumeric = cellfun(@isnumeric, varargin);
-         
-         % - Are the inputs scalar?
-         vbIsScalar = cellfun(@isscalar, varargin);
-         
-         % - Are the inputs of class MappedTensor
-         vbIsTensor = cellfun(@(o)(isa(o, 'MappedTensor')), varargin);
-         
-         % - Can we perform the operation?
-         if (nnz(vbIsNumeric & vbIsScalar & ~vbIsTensor) ~= 1)
-            error('MappedTensor:InvalidMinusOperands', ...
-                  '*** MappedTensor: ''minus'' (A-B) is only supported for a MappedTensor object and a scalar.');
-         end
-         
-         % - Get the scalar value
-         fScalar = varargin{vbIsNumeric & vbIsScalar};
-         mtVar = varargin{vbIsTensor};
-         
-         % - Find a dimension to slice along
-         vnTensorSize = size(mtVar);
-         nSliceDim = numel(vnTensorSize);
-
-         % - Perform the subtraction slice-wise
-         if (vbIsScalar(1))
-            fhSubtraction = @(tSlice)(fScalar - tSlice);
-         else
-            fhSubtraction = @(tSlice)(tSlice - fScalar);
-         end
-         SliceFunction(mtVar, fhSubtraction, nSliceDim);
+      function [varargout] = minus(varargin) %#ok<STOUT>
+         error('MappedTensor:NotImplemented', ...
+            '*** MappedTensor: ''minus'' (A-B) must be performed on a referenced portion of the tensor, or else explicitly with ''SliceFunction''.');
       end
       
       %% disp - METHOD Overloaded disp function
