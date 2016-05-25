@@ -22,6 +22,8 @@
 %           mtVariable = MappedTensor(..., 'Class', strClassName)
 %           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
 %           mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
+%           mtVariable = MappedTensor(tExistingTensor, 'Convert')
+%           mtVariable = MappedTensor(..., 'Like', tExistingTensor)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -47,6 +49,13 @@
 % ('ieee-be') or little-endian ('ieee-le') formats for data storage and
 % reading.  If not specified, the machine-native format will be used.
 %
+% The optional argument 'Convert' allows you to convert an existing matlab
+% tensor 'tExistingTensor' into a MappedTensor, of the appropriate class.
+%
+% The optional argument 'Like' allows you to create a MappedTensor with the
+% same class and complexity (i.e. real or complex) of 'tExistingTensor'.
+% Note that sparse MappedTensors are not supported.
+%
 % Usage: size(mtVariable)
 %        mtVariable(:) = rand(100, 100, 100);
 %        mfData = mtVariable(:, :, 34, 2);
@@ -68,6 +77,13 @@
 % Unary plus (+A) and minus (-A) are supported.  Binary plus (A+B), minus (A-B),
 % times (A*B, A.*B) as long as one of A or B is a scalar.  Divide (A/B,
 % A./B, B\A, B.\A) is supported, as long as B is a scalar.
+%
+% Transparent casting to other classes is supported in O(1) time. Note that
+% due to transparent casting and tranparent O(1) scaling, rounding may
+% occur in a different class to the returned data, and therefore may not
+% match matlab rounding precisely. If this is an issue, index the tensor
+% and then scale the returned values rather than rely on O(1) scaling of
+% the entire tensor.
 %
 % Save and load is minimally supported -- data is NOT saved, but on load a new
 % mapped tensor will be generated and filled with zeros.  Both save and load
@@ -149,7 +165,7 @@
 % fixes.
 
 classdef MappedTensor < handle
-   properties (SetAccess = private, GetAccess = private)
+   properties (SetAccess = private, GetAccess = public)
       strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
       bReadOnly = false;      % Should the data be protected from writing?
@@ -215,6 +231,52 @@ classdef MappedTensor < handle
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
+                  case {'convert'}
+                     % - Convert an existing tensor into a MappedTensor
+                     if (nargin > 2)
+                        error('MappedTensor:Usage', ...
+                              '*** MappedTensor: Only a single input argument is required when using ''Convert''.');
+                     end
+                     
+                     % - Do we already have a MappedTensor?
+                     if (isa(varargin{1}, 'MappedTensor'))
+                        % - Just return it
+                        mtVar = varargin{1};
+                        return;
+                        
+                     else
+                        % - Get the
+                        tfSourceTensor = varargin{1};
+
+                        % - Check the size of the incoming tensor
+                        if (numel(tfSourceTensor) == 0)
+                           error('MappedTensor:Arguments', ...
+                                 '*** MappedTensor: A zero-sized tensor cannot be converted to a MappedTensor.');
+                        end
+                        
+                        % - Remove 'Convert' arguments from varargin
+                        varargin([1 nArg]) = [];
+                        
+                        % - Create a MappedTensor
+                        mtVar = MappedTensor(size(tfSourceTensor), varargin{:}, 'Like', tfSourceTensor);
+                        
+                        % - Copy the data
+                        subsasgn(mtVar, substruct('()', {':'}), tfSourceTensor);
+                        return;
+                     end
+                     
+                  case {'like'}
+                     % - Set the class property accordingly
+                     mtVar.strClass = class(varargin{nArg+1});
+                     
+                     % - Set the complexity (real or complex) accordingly
+                     if (~isreal(varargin{nArg+1}))
+                        mtVar.bIsComplex = true;
+                     end
+                     
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
                   otherwise
                      % - No other properties are supported
                      error('MappedTensor:InvalidProperty', ...
@@ -261,7 +323,7 @@ classdef MappedTensor < handle
          
          % - Validate tensor size argument
          try
-            validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer'});
+            validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer', 'nonempty'});
          catch
             error('MappedTensor:Arguments', ...
                '*** MappedTensor: Error: ''vnTensorSize'' must be a positive integer vector.');
@@ -305,6 +367,11 @@ classdef MappedTensor < handle
          
          % - Record number of total elements
          mtVar.nNumElements = prod(vnTensorSize);
+         
+         % - Set complexity
+         if (mtVar.bIsComplex)
+            make_complex(mtVar);
+         end
       end
       
       % delete - DESTRUCTOR
@@ -442,13 +509,33 @@ classdef MappedTensor < handle
          end
          
          % - Reference the tensor data element
+         tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         
          if (mtVar.bIsComplex)
-            % - Get the real and complex parts
-            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
-                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
+            tfImagData = mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         end
+            
+         % - Cast data, if required
+         if (mtVar.bMustCast)
+            tfData = cast(tfData, mtVar.strClass);
+            
+            if (mtVar.bIsComplex)
+               tfImagData = cast(tfImagData, mtVar.strClass);
+            end
+         end
+         
+         % - Apply scaling factors
+         if (mtVar.bIsComplex)
+            tfData = complex(mtVar.fRealFactor .* tfData, ...
+                             mtVar.fComplexFactor .* tfImagData);
          else
-            % - Just return the real part
-            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            tfData = mtVar.fRealFactor .* tfData;
+         end
+         
+         % - Recast data, if required, to take into account scaling which
+         % can occur in another class
+         if (mtVar.bMustCast)
+            tfData = cast(tfData, mtVar.strClass);
          end
          
          % - Permute dimensions
@@ -463,15 +550,13 @@ classdef MappedTensor < handle
             cnSize = num2cell(size(tfData));
             tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
          end
-         
-         % - Cast data, if required
-         if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strClass);
-         end
       end
       
       % subsasgn - METHOD Overloaded subsasgn
-      function [mtVar] = subsasgn(mtVar, subs, tfData)
+      function [mtVar] = subsasgn(mtVar, S, tfData)
+         % - Test for valid subscripts
+         cellfun(@isvalidsubscript, S.subs);
+
          % - Test read-only status if tensor
          if (mtVar.bReadOnly)
             error('MappedTensor:ReadProtect', '*** MappedTensor: Attempted write to a read-only tensor.');
@@ -487,7 +572,13 @@ classdef MappedTensor < handle
          
          % - Cast data, if required
          if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strStorageClass);
+            if (mtVar.bIsComplex)
+               tfData = complex(cast(real(tfData) ./ mtVar.fRealFactor, mtVar.strStorageClass), ...
+                                cast(imag(tfData) ./ mtVar.fComplexFactor, mtVar.strStorageClass));
+                             
+            else
+               tfData = cast(tfData ./ mtVar.fRealFactor, mtVar.strStorageClass);
+            end
          end
          
          % - Permute input data
@@ -495,12 +586,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, real(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, imag(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, tfData, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
       end
       
@@ -514,7 +605,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% Overloaded methods (size, numel, permute, ipermute, ctranspose, transpose, isreal)
+      %% Overloaded methods (size, numel, ndims, length, permute, ipermute, ctranspose, transpose, isreal)
       % size - METHOD Overloaded size function
       function [varargout] = size(mtVar, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
@@ -583,6 +674,11 @@ classdef MappedTensor < handle
          nNumElem = mtVar.nNumElements;
       end
       
+      % length - METHOD Overloaded length function
+      function [nLength] = length(mtVar)
+         nLength = max(size(mtVar));
+      end
+      
       % permute - METHOD Overloaded permute function
       function [mtVar] = permute(mtVar, vnNewOrder)
          vnCurrentOrder = mtVar.vnDimensionOrder;
@@ -628,7 +724,7 @@ classdef MappedTensor < handle
       
       % isnumeric - METHOD Overloaded isnumeric function
       function [bIsNumeric] = isnumeric(mtVar)
-         bIsNumeric = ~islogical(mtVar);
+         bIsNumeric = ~islogical(mtVar) && ~ischar(mtVar);
       end
       
       % isscalar - METHOD Overloaded isscalar function
@@ -647,8 +743,25 @@ classdef MappedTensor < handle
       end
       
       % isnan - METHOD Overloaded isnan function
-      function [bIsNan] = isnan(mtVar) %#ok<MANU>
-         bIsNan = false;
+      function [tbIsNan] = isnan(mtVar)
+         tbIsNan = reshape(isnan(mtVar(:)), size(mtVar));
+      end
+      
+      % isfloat - METHOD Overloaded isfloat function
+      function [bIsFloat] = isfloat(mtVar)
+         bIsFloat = isequal(mtVar.strClass, 'single') || isequal(mtVar.strClass, 'double');
+      end
+      
+      % isinteger - METHOD Overloaded isinteger function
+      function [bIsInteger] = isinteger(mtVar)
+         bIsInteger = ~isfloat(mtVar) & ~islogical(mtVar) & ~ischar(mtVar);
+      end
+      
+      % strfind - METHOD Overloaded strfind function
+      function [nLoc] = strfind(mtVar, varargin) %#ok<INUSD>
+         warning('MappedTensor:Unsupported', ...
+                 '--- MappedTensor/strfind: Warning: strfind is not supported.');
+         nLoc =[];
       end
       
       %% Overloaded methods (uminus, uplus, times, mtimes, ldivide, rdivide, mldivide, mrdivide)
@@ -694,7 +807,7 @@ classdef MappedTensor < handle
          mtVar.fRealFactor = mtVar.fRealFactor .* fScalar;
          
          if (mtVar.bIsComplex)
-            mtVar.fCmplxFactor = mtVar.fCmplxFactor .* fScalar;
+            mtVar.fComplexFactor = mtVar.fComplexFactor .* fScalar;
          end
       end
       
@@ -1364,12 +1477,42 @@ classdef MappedTensor < handle
          tfData = cast(mtVar, 'double');
       end
       
-      function tfData = cast(mtVar, strClass)
-         warning('MappedTensor:WholeTensor', ...
-                 '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
-              
-         sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
-         tfData = builtin('cast', subsref(mtVar, sSubs), strClass);
+      % cast - Overloaded "cast" method.
+      %
+      % Usage: tfData = cast(mtVar, strClass <, bForce>)
+      %
+      % See the documentation for the built-in "cast" function.
+      %
+      % The optional parameter 'bForce' 
+      function tfData = cast(mtVar, strClass, bForce)
+         % - Should we really cast the entire tensor?
+         if (~exist('bForce', 'var') || isempty(bForce))
+            bForce = false;
+         end
+         
+         % - Validate the class
+         try
+            sSubs = substruct('()', {1});
+            cast(subsref(mtVar, sSubs), strClass);
+         catch
+            error('MappedTensor:cast:UnsupportedCLass', ...
+                  '*** MappedTensor: Error: Unsupported data type for conversion: ''%s''', strClass);
+         end
+         
+         % - Cast the object
+         if (bForce)
+            warning('MappedTensor:WholeTensor', ...
+               '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
+            
+            sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
+            tfData = builtin('cast', subsref(mtVar, sSubs), strClass);
+            
+         else
+            % - Do a transparent cast
+            tfData = mtVar;
+            mtVar.bMustCast = true;
+            mtVar.strClass = strClass;
+         end
       end
    end
 end
