@@ -1705,18 +1705,18 @@ end
 function [hRepSumFunc] = GetMexFunctionHandles
    % - Does the compiled MEX function exist?
    if (exist('mapped_tensor_repsum') ~= 3) %#ok<EXIST>
-      try %#ok<TRYNC>
-         % - Move to the MappedTensor private directory
-         strMTDir = fileparts(which('TIFFStack'));
-         strCWD = cd(fullfile(strMTDir, 'private'));
+      % - Move to the MappedTensor private directory
+      strMTDir = fileparts(which('TIFFStack'));
+      strCWD = cd(fullfile(strMTDir, 'private'));
          
+      try %#ok<TRYNC>
          % - Try to compile the MEX functions
          disp('--- TIFFStack: Compiling MEX functions.');
          mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
-         
-         % - Move back to previous working directory
-         cd(strCWD);
       end
+      
+      % - Move back to previous working directory
+      cd(strCWD);
    end
    
    % - Did we succeed?
