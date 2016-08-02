@@ -233,6 +233,10 @@ classdef TIFFStack < handle
             % - Read and save image information (using tiffread for speed and compatibility)
             [~, sInfo] = tiffread31_info(strFilename);
 
+            % - Read and save image information (using imfinfo for BigTIFF compatibility)
+%             sInfo = imfinfo(strFilename);
+%             oStack.sImageInfo = sInfo;
+
             % - Detect a ImageJ fake BigTIFF stack
             [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(sInfo);
             
@@ -373,7 +377,7 @@ classdef TIFFStack < handle
                % - Fix up rows per strip (inconsistency between Windows and
                % OS X Tifflib
                nRowsPerStrip = TiffgetTag(oStack.TIF, 'RowsPerStrip');
-               if (nRowsPerStrip ~= sInfo(1).RowsPerStrip)
+               if ~isfield(sInfo, 'RowsPerStrip') || (nRowsPerStrip ~= sInfo(1).RowsPerStrip)
                    [sInfo.RowsPerStrip] = deal(nRowsPerStrip);
                end
                
