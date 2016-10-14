@@ -723,7 +723,7 @@ classdef TIFFStack < handle
          % - Trim trailing unitary dimensions
          vbIsUnitary = vnSize == 1;
          if (vbIsUnitary(end))
-            nLastNonUnitary = numel(vnSize) - find(fliplr(vnSize) == 1, 1, 'last');
+            nLastNonUnitary = find(~vbIsUnitary, 1, 'last');
             if (nLastNonUnitary < numel(vnSize))
                vnSize = vnSize(1:nLastNonUnitary);
             end
