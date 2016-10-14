@@ -98,8 +98,20 @@ function TS_UnitTest(strFilename)
    warning(w);
 
    %% - Test deinterleaved stack
+   vnStackSize = size(tfStack);
    nNumFrames = size(tfStack, 3);
-   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames]);
+
+   % - Test that de-interleaving succeeded
+   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames 1]);   
+   assert(isequal(size(tsStack), [vnStackSize([1 2]) 1 1 nNumFrames 1 vnStackSize(4:end)]), ...
+          'TIFFStack:UnitTestFailed', 'De-interleaving the stack was unsuccessful.');
+
+   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames]);   
+   assert(isequal(size(tsStack), [vnStackSize([1 2]) 1 1 nNumFrames vnStackSize(4:end)]), ...
+          'TIFFStack:UnitTestFailed', 'De-interleaving the stack was unsuccessful.');
+
+	TSUT_assertFail('MATLAB:TIFFStack:expectedInteger', 'TIFFStack(strFilename, [], .5);');
+       
    tfStack = reshape(tfStack, [size(tfStack, 1) size(tfStack, 2) 1 1 nNumFrames size(tfStack, 4)]);
    TSUT_TestReferencing(tsStack, tfStack, 'Deinterleaved stack');
 
