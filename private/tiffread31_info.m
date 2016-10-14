@@ -58,6 +58,7 @@ if (tiff_id ~= 42) && (tiff_id ~= 43)
 end
 
 % - By default, read 4-byte pointers
+strIFDNumEntriesSize = 'uint16';
 strIFDClassSize = 'uint32';
 nIFDTagBytes = 12;
 nIFDClassBytes = 2;
@@ -77,10 +78,12 @@ if (tiff_id == 43)
    % - Get IFD pointer data class
    switch (offset_size)
       case 8
+         strIFDNumEntriesSize = 'uint64';
          strIFDClassSize = 'uint64';
          nIFDClassBytes = 8;
          
       case 16
+         strIFDNumEntriesSize = 'uint64';
          strIFDClassSize = '2*uint64';
          nIFDClassBytes = 16;
          
@@ -110,7 +113,7 @@ while  ifd_pos ~= 0
    file_seek(ifd_pos);
    
    %read in the number of IFD entries
-   num_entries = fread(TIF.file,1,strIFDClassSize, TIF.ByteOrder);
+   num_entries = fread(TIF.file,1,strIFDNumEntriesSize, TIF.ByteOrder);
    %fprintf('num_entries = %i\n', num_entries);
    
    % store current position:
