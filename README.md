@@ -132,11 +132,11 @@ Letters 86: 3192-3195; 2001. DOI: [10.1103/PhysRevLett.86.3192]
 
 ## Acknowledgements
 
-This work uses `tiffread2` from [Francois Nedelec] to access the data in
+This work optionally uses `tiffread` from [Francois Nedelec] to access the data in
 the TIFF file. [Matlab] includes the ability to read TIFF files in
 `imread`, including niceties such as only reading a region of interest
 from each frame, but imread is incredibly slow and amazingly buggy (as
-of July 2011). TIFFStack uses `tiffread2` in an optimised fashion, by
+of July 2011). TIFFStack uses `tiffread` in an optimised fashion, by
 reading and caching the header information (the image file directories —
 IFDs). Each frame can then be read directly without re-opening the file
 and re-reading the IFDs.
@@ -147,7 +147,7 @@ and re-reading the IFDs.
   [Frontiers in Neuroinformatics]: http://www.frontiersin.org/neuroinformatics
   [FFSS]: http://journal.frontiersin.org/Journal/10.3389/fninf.2014.00085
   [10.1103/PhysRevLett.86.3192]: //dx.doi.org/10.1103/PhysRevLett.86.3192
-  [Francois Nedelec]: http://www.embl.de/~nedelec/home/index.html
+  [Francois Nedelec]: http://www.cytosim.org
   [Matlab]: http://mathworks.com/
   [Download `TIFFStack`]: /resources/code/TIFFStack.zip
   [Matlab]: http://mathworks.com/
