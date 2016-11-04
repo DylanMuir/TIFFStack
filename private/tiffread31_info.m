@@ -53,13 +53,52 @@ end
 
 tiff_id = fread(TIF.file,1,'uint16', TIF.ByteOrder);
 
-if (tiff_id ~= 42)
-   error('This is not a TIFF file (missing 42).');
+if (tiff_id ~= 42) && (tiff_id ~= 43)
+   error('This is not a TIFF file (missing 42 or 43).');
+end
+
+% - By default, read 4-byte pointers
+strIFDNumEntriesSize = 'uint16';
+strIFDClassSize = 'uint32';
+nIFDTagBytes = 12;
+nIFDClassBytes = 2;
+strTagSizeClass = 'uint32';
+nInlineBytes = 4;
+
+% - Handle a BigTIFF file
+if (tiff_id == 43)
+   offset_size = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
+   test_val = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
+   
+   % - Test check value
+   if (test_val ~= 0)
+      error('This is not a valid BigTIFF file (invalid test value).');
+   end
+   
+   % - Get IFD pointer data class
+   switch (offset_size)
+      case 8
+         strIFDNumEntriesSize = 'uint64';
+         strIFDClassSize = 'uint64';
+         nIFDClassBytes = 8;
+         
+      case 16
+         strIFDNumEntriesSize = 'uint64';
+         strIFDClassSize = '2*uint64';
+         nIFDClassBytes = 16;
+         
+      otherwise
+         error('Unknown IFD pointer size for BigTIFF file.');
+   end
+   
+   nIFDTagBytes = 20;
+   strTagSizeClass = 'uint64';
+   nInlineBytes = 8;
 end
 
 %% ---- read the image file directories (IFDs)
 
-ifd_pos   = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
+ifd_pos   = fread(TIF.file, 1, strIFDClassSize, TIF.ByteOrder);
 img_indx  = 0;
 
 while  ifd_pos ~= 0
@@ -74,15 +113,15 @@ while  ifd_pos ~= 0
    file_seek(ifd_pos);
    
    %read in the number of IFD entries
-   num_entries = fread(TIF.file,1,'uint16', TIF.ByteOrder);
+   num_entries = fread(TIF.file,1,strIFDNumEntriesSize, TIF.ByteOrder);
    %fprintf('num_entries = %i\n', num_entries);
    
    % store current position:
-   entry_pos = ifd_pos+2;
+   entry_pos = ifd_pos+nIFDClassBytes;
    
    % read the next IFD address:
-   file_seek(ifd_pos+12*num_entries+2);
-   ifd_pos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
+   file_seek(ifd_pos+nIFDTagBytes*num_entries+nIFDClassBytes);
+   ifd_pos = fread(TIF.file, 1, strIFDClassSize, TIF.ByteOrder);
    
    %fprintf('reading IFD %i at position %i\n', img_indx, ifd_pos);
    
@@ -90,12 +129,12 @@ while  ifd_pos ~= 0
    for inx = 1:num_entries
       
       % move to next IFD entry in the file
-      file_seek(entry_pos+12*(inx-1));
+      file_seek(entry_pos+nIFDTagBytes*(inx-1));
       
       % read entry tag
       entry_tag = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
       % read entry
-      entry = readIFDentry(entry_tag);
+      entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes);
       
       switch entry_tag
          case 256         % image width = number of column
@@ -183,15 +222,49 @@ end
          case 5 % rational
             nbBytes=8;
             matlabType='uint32';
-         case 7
+
+         case 6 % signed byte
+            nbBytes = 1;
+            matlabType = 'int8';
+
+         case 7   % undefined
             nbBytes=1;
             matlabType='uchar';
+            
+         case 8    % signed short
+            nbBytes = 2;
+            matlabType = 'int16';
+            
+         case 9   % signed long
+            nbBytes = 4;
+            matlabType = 'int32';
+            
+         case 10  % long rational
+            nbBytes = 8;
+            matlabType = 'int32';
          case 11
             nbBytes=4;
             matlabType='float32';
          case 12
             nbBytes=8;
             matlabType='float64';
+            
+         case 13 %TIFF_IFD
+            nbBytes = 4;
+            matlabType = 'uint32';
+            
+         case 16 % Long8
+            nbBytes = 8;
+            matlabType = 'uint64';
+            
+         case 17 % SLong8
+            nbBytes = 8;
+            matlabType = 'int64';
+            
+         case 18 % Unsigned IFD offet 8 bytes
+            nbBytes = 8;
+            matlabType = 'uint64';
+            
          otherwise
             error('tiff type %i not supported', tiffType)
       end
@@ -199,21 +272,20 @@ end
 
 %% ==================sub-functions that reads an IFD entry:===================
 
-   function  entry = readIFDentry(entry_tag)
+   function  entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes)
       
       entry.tiffType = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
-      entry.cnt      = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
+      entry.cnt      = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
       %disp(['tiffType =', num2str(entry.tiffType),', cnt = ',num2str(entry.cnt)]);
       
       [ entry.nbBytes, entry.matlabType ] = convertType(entry.tiffType);
       
-      if entry.nbBytes * entry.cnt > 4
+      if entry.nbBytes * entry.cnt > nInlineBytes
          %next field contains an offset:
          fpos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
          %disp(strcat('offset = ', num2str(offset)));
          file_seek(fpos);
       end
-      
       
       if entry_tag == 33629   % metamorph stack plane specifications
          entry.val = fread(TIF.file, 6*entry.cnt, entry.matlabType, TIF.ByteOrder);

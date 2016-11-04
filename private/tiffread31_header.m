@@ -377,9 +377,27 @@ end
          case 5 % rational
             nbBytes=8;
             matlabType='uint32';
-         case 7
+            
+         case 6 % signed byte
+            nbBytes = 1;
+            matlabType = 'int8';
+                        
+         case 7   % undefined
             nbBytes=1;
             matlabType='uchar';
+            
+         case 8    % signed short
+            nbBytes = 2;
+            matlabType = 'int16';
+            
+         case 9   % signed long
+            nbBytes = 4;
+            matlabType = 'int32';
+            
+         case 10  % long rational
+            nbBytes = 8;
+            matlabType = 'int32';
+
          case 11
             nbBytes=4;
             matlabType='float32';
