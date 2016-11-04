@@ -128,7 +128,7 @@ Please cite our publication in lieu of thanks, if you use this code.
 \[1\] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review
 Letters 86: 3192-3195; 2001. DOI: [10.1103/PhysRevLett.86.3192]
 
-\[2\] <http://www.embl.de/~nedelec/>
+\[2\] <http://www.cytosim.org>
 
 ## Acknowledgements
 
