@@ -1,6 +1,6 @@
 function [TIF, INFO] = tiffread31_info(file_name)
 
-%% set defaults values :
+%% set defaults values:
 
 opt.ReadUnknownTags = true;
 opt.ConsolidateStrips = true;
@@ -13,7 +13,7 @@ opt.DistributeMetaData = true;
 % the structure ANDOR has additional header information which is added to
 % each plane of the image eventually
 
-TIF = struct('ByteOrder', 'ieee-le');          %byte order string
+TIF = struct('ByteOrder', 'ieee-le');  % byte order string
 TIF.SamplesPerPixel = 1;
 INFO.SamplesPerPixel = 1;
 TIF.PlanarConfiguration = 1;
@@ -39,7 +39,7 @@ image_name = [name, ext];
 
 bos = fread(TIF.file, 2, '*char');
 if ( strcmp(bos', 'II') )
-   TIF.ByteOrder = 'ieee-le';    % Intel little-endian format
+   TIF.ByteOrder = 'ieee-le';  % Intel little-endian format
    INFO.ByteOrder = 'little-endian';
 elseif ( strcmp(bos','MM') )
    TIF.ByteOrder = 'ieee-be';
@@ -96,7 +96,7 @@ if (tiff_id == 43)
    nInlineBytes = 8;
 end
 
-%% Maps to accelerate types conversions
+%% Maps to accelerate types conversions in readIFDentry function
 
 nbBytesMap = [ ...
     1, ... byte
@@ -141,7 +141,7 @@ matlabTypeMap = { ...
 ifd_pos   = fread(TIF.file, 1, strIFDClassSize, TIF.ByteOrder);
 img_indx  = 0;
 
-while  ifd_pos ~= 0
+while ifd_pos ~= 0
    
    img_indx = img_indx + 1;
    
@@ -190,18 +190,18 @@ while  ifd_pos ~= 0
             INFO(img_indx).ImageDescription = entry.val;
          case 277
             TIF.SamplesPerPixel  = entry.val;
-            INFO(img_indx).SamplesPerPixel  = entry.val;
+            INFO(img_indx).SamplesPerPixel = entry.val;
             %fprintf('Color image: sample_per_pixel=%i\n',  TIF.SamplesPerPixel);
          case 278
-            INFO(img_indx).RowsPerStrip   = entry.val;
-         case 284         %planar configuration describe the order of RGB
+            INFO(img_indx).RowsPerStrip = entry.val;
+         case 284         % planar configuration describe the order of RGB
             TIF.PlanarConfiguration = entry.val;
          case 339
-            TIF.SampleFormat   = entry.val;
+            TIF.SampleFormat = entry.val;
       end
    end
    
-   %total number of bytes per image:
+   % total number of bytes per image:
    if TIF.PlanarConfiguration == 1
       TIF.BytesPerPlane = TIF.SamplesPerPixel * INFO(img_indx).Width * INFO(img_indx).Height * TIF.BytesPerSample;
    else
@@ -243,18 +243,25 @@ end
 
 %% ==================sub-functions that reads an IFD entry:===================
 
-   function  entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes)
+   function entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes)
       
       entry.tiffType = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
       entry.cnt      = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
       %disp(['tiffType =', num2str(entry.tiffType),', cnt = ',num2str(entry.cnt)]);
       
-      entry.nbBytes = nbBytesMap(entry.tiffType);
-      entry.matlabType = matlabTypeMap{entry.tiffType};
-      % TODO error('tiff type %i not supported', tiffType)
+      try
+         entry.nbBytes = nbBytesMap(entry.tiffType);
+         entry.matlabType = matlabTypeMap{entry.tiffType};
+      catch ME
+         if strcmp(ME.identifier, 'MATLAB:badsubscript')
+            error('tiff type %i not supported', entry.tiffType);
+         else
+            rethrow(ME);
+         end
+      end
       
       if entry.nbBytes * entry.cnt > nInlineBytes
-         %next field contains an offset:
+         % next field contains an offset:
          fpos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
          %disp(strcat('offset = ', num2str(offset)));
          file_seek(fpos);
@@ -262,10 +269,10 @@ end
       
       if entry_tag == 33629   % metamorph stack plane specifications
          entry.val = fread(TIF.file, 6*entry.cnt, entry.matlabType, TIF.ByteOrder);
-      elseif entry_tag == 34412  %TIF_CZ_LSMINFO
+      elseif entry_tag == 34412  % TIF_CZ_LSMINFO
          entry.val = readLSMinfo;
       else
-         if entry.tiffType == 5 % TIFF 'rational' type
+         if entry.tiffType == 5  % TIFF 'rational' type
             val = fread(TIF.file, 2*entry.cnt, entry.matlabType, TIF.ByteOrder);
             entry.val = val(1:2:length(val)) ./ val(2:2:length(val));
          else
@@ -323,7 +330,7 @@ end
       
       % There is more information stored in this table, which is skipped here
       
-      %read real acquisition times:
+      % read real acquisition times:
       if ( S.OffsetTimeStamps > 0 )
          
          status =  fseek(TIF.file, S.OffsetTimeStamps, -1);
@@ -335,7 +342,7 @@ end
          StructureSize          = fread(TIF.file, 1, 'int32', TIF.ByteOrder); %#ok<NASGU>
          NumberTimeStamps       = fread(TIF.file, 1, 'int32', TIF.ByteOrder);
          for i=1:NumberTimeStamps
-            R.TimeStamp(i)     = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
+            R.TimeStamp(i)      = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
          end
          
          %calculate elapsed time from first acquisition:
