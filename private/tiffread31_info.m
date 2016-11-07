@@ -96,6 +96,46 @@ if (tiff_id == 43)
    nInlineBytes = 8;
 end
 
+%% Maps to accelerate types conversions
+
+nbBytesMap = [ ...
+    1, ... byte
+    1, ... ascii string
+    2, ... word
+    4, ... dword/uword
+    8, ... rational
+    1, ... signed byte
+    1, ... undefined
+    2, ... signed short
+    4, ... signed long
+    8, ... long rational
+    4, ... ???
+    8, ... ???
+    4, ... TIFF_IFD
+    8, ... Long8
+    8, ... SLong8
+    8, ... Unsigned IFD offet 8 bytes
+];
+
+matlabTypeMap = { ...
+    'uint8',   ... byte
+    'uchar',   ... ascii string
+    'uint16',  ... word
+    'uint32',  ... dword/uword
+    'uint32',  ... rational
+    'int8',    ... signed byte
+    'uchar',   ... undefined
+    'int16',   ... signed short
+    'int32',   ... signed long
+    'int32',   ... long rational
+    'float32', ... ???
+    'float64', ... ???
+    'uint32',  ... TIFF_IFD
+    'uint64',  ... Long8
+    'int64',   ... SLong8
+    'uint64',  ... Unsigned IFD offet 8 bytes
+};
+
 %% ---- read the image file directories (IFDs)
 
 ifd_pos   = fread(TIF.file, 1, strIFDClassSize, TIF.ByteOrder);
@@ -201,75 +241,6 @@ end
       end
    end
 
-
-%% ==================sub-functions that reads an IFD entry:===================
-
-
-   function [nbBytes, matlabType] = convertType(tiffType)
-      switch (tiffType)
-         case 1 %byte
-            nbBytes=1;
-            matlabType='uint8';
-         case 2 %ascii string
-            nbBytes=1;
-            matlabType='uchar';
-         case 3 % word
-            nbBytes=2;
-            matlabType='uint16';
-         case 4 %dword/uword
-            nbBytes=4;
-            matlabType='uint32';
-         case 5 % rational
-            nbBytes=8;
-            matlabType='uint32';
-
-         case 6 % signed byte
-            nbBytes = 1;
-            matlabType = 'int8';
-
-         case 7   % undefined
-            nbBytes=1;
-            matlabType='uchar';
-            
-         case 8    % signed short
-            nbBytes = 2;
-            matlabType = 'int16';
-            
-         case 9   % signed long
-            nbBytes = 4;
-            matlabType = 'int32';
-            
-         case 10  % long rational
-            nbBytes = 8;
-            matlabType = 'int32';
-         case 11
-            nbBytes=4;
-            matlabType='float32';
-         case 12
-            nbBytes=8;
-            matlabType='float64';
-            
-         case 13 %TIFF_IFD
-            nbBytes = 4;
-            matlabType = 'uint32';
-            
-         case 16 % Long8
-            nbBytes = 8;
-            matlabType = 'uint64';
-            
-         case 17 % SLong8
-            nbBytes = 8;
-            matlabType = 'int64';
-            
-         case 18 % Unsigned IFD offet 8 bytes
-            nbBytes = 8;
-            matlabType = 'uint64';
-            
-         otherwise
-            error('tiff type %i not supported', tiffType)
-      end
-   end
-
 %% ==================sub-functions that reads an IFD entry:===================
 
    function  entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes)
@@ -278,7 +249,9 @@ end
       entry.cnt      = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
       %disp(['tiffType =', num2str(entry.tiffType),', cnt = ',num2str(entry.cnt)]);
       
-      [ entry.nbBytes, entry.matlabType ] = convertType(entry.tiffType);
+      entry.nbBytes = nbBytesMap(entry.tiffType);
+      entry.matlabType = matlabTypeMap{entry.tiffType};
+      % TODO error('tiff type %i not supported', tiffType)
       
       if entry.nbBytes * entry.cnt > nInlineBytes
          %next field contains an offset:
@@ -375,5 +348,3 @@ end
    end
 
 end
-
-
