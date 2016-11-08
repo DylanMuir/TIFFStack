@@ -258,10 +258,11 @@ classdef TIFFStack < handle
             end
             
             % - Deinterleave hyperstacks automatically
-            if (bIsImageJHyperStack && isempty(vnInterleavedFrameDims))
+            bImageJDeinterleaving = bIsImageJHyperStack && isempty(vnInterleavedFrameDims);
+            if bImageJDeinterleaving
                vnInterleavedFrameDims = vnInterleavedIJFrameDims;
             end
-            
+
             % - Initialise object, depending on underlying access method
             if (oStack.bMTStack)
                % - Fix up stack size
@@ -447,7 +448,7 @@ classdef TIFFStack < handle
             oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
             
             % - Fix up dimensions order for ImageJ HyperStack
-            if (bIsImageJHyperStack)
+            if (bImageJDeinterleaving)
                oStack = permute(oStack, [1 2 5 4 3]);
             end
 
