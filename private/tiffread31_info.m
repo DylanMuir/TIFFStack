@@ -269,11 +269,11 @@ end
          entry_val = fread(TIF.file, 6 * cnt, matlabType, TIF.ByteOrder);
 
       elseif entry_tag == 34412  % TIF_CZ_LSMINFO
-         entry_val = readLSMinfo;
+         entry_val = readLSMinfo();
 
       elseif tiffType == 5  % TIFF 'rational' type
          val = fread(TIF.file, 2 * cnt, matlabType, TIF.ByteOrder);
-         entry_val = val(1:2:length(val)) ./ val(2:2:length(val));
+         entry_val = val(1:2:end) ./ val(2:2:end);
 
       else
          entry_val = fread(TIF.file, cnt, matlabType, TIF.ByteOrder)';
