@@ -1,6 +1,6 @@
-% TIFFStack - Manipulate a TIFF file like a tensor
+% <strong>TIFFStack</strong> - Manipulate a TIFF file like a tensor
 % 
-% Usage: tsStack = TIFFStack(strFilename <, bInvert, vnInterleavedFrameDims>)
+% Usage: tsStack = <<strong>TIFFStack</strong>(strFilename <, bInvert, vnInterleavedFrameDims>)
 % 
 % A TIFFStack object behaves like a read-only memory mapped TIFF file.  The
 % entire image stack is treated as a matlab tensor.  Each frame of the file must
@@ -13,11 +13,11 @@
 % D R Muir and B M Kampa, 2015. "FocusStack and StimServer: a new open
 %    source MATLAB toolchain for visual stimulation and analysis of two-photon
 %    calcium neuronal imaging data". Frontiers in Neuroinformatics 8 (85).
-%    DOI: 10.3389/fninf.2014.00085
+%    DOI: <a href="http://dx.doi.org/10.3389/fninf.2014.00085">10.3389/fninf.2014.00085</a>
 % 
 % This class attempts to use the version of tifflib built-in to recent
 % versions of Matlab, if available.  Otherwise this class uses a modified
-% version of tiffread [1, 2] to read data.
+% version of tiffread [2, 3] to read data.
 %
 % permute, ipermute and transpose are now transparantly supported. Note
 % that to read a pixel, the entire frame containing that pixel is read. So
@@ -36,8 +36,7 @@
 %
 % -------------------------------------------------------------------------
 % 
-% Construction:
-% 
+% <strong>Construction</strong>
 % >> tsStack = TIFFStack('test.tiff');       % Construct a TIFF stack associated with a file
 % 
 % >> tsStack = TIFFStack('test.tiff', true); % Indicate that the image data should be inverted
@@ -75,8 +74,7 @@
 % 
 % -------------------------------------------------------------------------
 %
-% De-interleaving frame dimensions in complex stacks
-%
+% <strong>De-interleaving frame dimensions in complex stacks</strong>
 % Some TIFF generation software stores multiple samples per pixel as
 % interleaved frames in a TIFF file. Other complex stacks may include
 % multiple different images per frame of time (e.g. multiple cameras or
@@ -123,8 +121,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% ImageJ stacks
-%
+% <strong>ImageJ stacks</strong>
 % ImageJ HyperStacks are automatically deinterleaved, if encountered. By
 % default, the stacks will be presented as [Y X T Z C]. They can of course
 % be permuted. If desired, the interleaving can be overridden by providing
@@ -136,10 +133,15 @@
 % MappedTensor is not available, a warning will be issued.
 %
 % References:
-% [1] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review Letters
-%        86: 3192-3195; 2001. DOI: 10.1103/PhysRevLett.86.3192
+% [1] D R Muir and B M Kampa, 2015. "FocusStack and StimServer: a new open
+%        source MATLAB toolchain for visual stimulation and analysis of two-photon
+%        calcium neuronal imaging data". Frontiers in Neuroinformatics 8 (85).
+%        DOI: <a href="http://dx.doi.org/10.3389/fninf.2014.00085">10.3389/fninf.2014.00085</a>
+%
+% [2] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review Letters
+%        86: 3192-3195; 2001. DOI: <a href="http://dx.doi.org/10.1103/PhysRevLett.86.3192">10.1103/PhysRevLett.86.3192</a>
 % 
-% [2] http://www.embl.de/~nedelec/
+% [3] <a href="http://www.cytosim.org">http://www.cytosim.org</a>
 
 % Author: Dylan Muir <muir@hifo.uzh.ch>
 % Created: 28th June, 2011
@@ -469,7 +471,7 @@ classdef TIFFStack < handle
             end
 
          else
-            % - Close the TIFF file, if opened by tiffread29_header
+            % - Close the TIFF file, if opened by tiffread31_header
             if (isfield(oStack.TIF, 'file'))
                fclose(oStack.TIF.file);
             end
@@ -1776,6 +1778,18 @@ function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFram
          nNumChannels = sscanf(strImageDesc(strfind(strImageDesc, 'channels='):end), 'channels=%d');
          nNumSlices = sscanf(strImageDesc(strfind(strImageDesc, 'slices='):end), 'slices=%d');
          nNumFrames = sscanf(strImageDesc(strfind(strImageDesc, 'frames='):end), 'frames=%d');
+         
+         if (isempty(nNumChannels))
+            nNumChannels = 1;
+         end
+         
+         if (isempty(nNumSlices))
+            nNumSlices = 1;
+         end
+         
+         if (isempty(nNumFrames))
+            nNumFrames = 1;
+         end
          
          % - Deinterleave stack
          vnStackDims = [sInfo(1).Height sInfo(1).Width nNumFrames*nNumSlices*nNumChannels 1];
