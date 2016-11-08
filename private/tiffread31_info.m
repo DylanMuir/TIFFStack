@@ -204,8 +204,7 @@ while ifd_pos ~= 0
       TIF.BytesPerPlane = TIF.SamplesPerPixel * INFO(img_indx).Width * INFO(img_indx).Height * TIF.BytesPerSample;
    else
       TIF.BytesPerPlane = INFO(img_indx).Width * INFO(img_indx).Height * TIF.BytesPerSample;
-   end
-   
+   end   
 end
 
 % determine the type of data stored in the pixels:
@@ -217,14 +216,23 @@ end
 switch( SampleFormat )
    case 1
       TIF.classname = sprintf('uint%i', TIF.BitsPerSample(1));
+      [INFO.MaxSampleValue] = deal(2.^TIF.BitsPerSample - 1);
+      [INFO.MinSampleValue] = deal(0);
    case 2
       TIF.classname = sprintf('int%i', TIF.BitsPerSample(1));
+      [INFO.MaxSampleValue] = deal(2.^(TIF.BitsPerSample-1) - 1);
+      [INFO.MinSampleValue] = deal(-2.^(TIF.BitsPerSample-1));
    case 3
       if (TIF.BitsPerSample(1) == 32 )
          TIF.classname = 'single';
+         [INFO.MaxSampleValue] = realmax('single');
+         [INFO.MinSampleValue] = -realmax('single');
       else
          TIF.classname = 'double';
+         [INFO.MaxSampleValue] = realmax('double');
+         [INFO.MinSampleValue] = -realmax('double');
       end
+      
    otherwise
       error('TIFFStack:Format', '*** TIFFStack: Error: Unsuported TIFF sample format [%i].', SampleFormat);
 end

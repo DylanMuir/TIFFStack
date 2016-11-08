@@ -46,11 +46,25 @@ function TS_UnitTest(strFilename)
    end
    
    % - Open a test TIFF file
-   if (~exist('strFilename', 'var') || isempty(strFilename))
-      % - Find TIFFStack and unit test file
+   if (exist('strFilename', 'var') && ~isempty(strFilename))
+      % - Run on user-supplied file
+      TSUT_RunTestsOnFile(strFilename);
+      
+   else
+      % - Find unit test file
       strFilename = fullfile(strTSDir, 'private', 'TS_UnitTestImage.tif');
+      TSUT_RunTestsOnFile(strFilename);
+
+      % - Find unit test bigtiff file
+      strFilename = fullfile(strTSDir, 'private', 'TS_UnitTestImage_BigTIFF.tif');
+      TSUT_RunTestsOnFile(strFilename);
    end
+end
+
+function TSUT_RunTestsOnFile(strFilename)
    
+   fprintf('--- TS_UnitTest: Running on file [%s]...\n', strFilename);
+
    % - Try to make a TIFFStack object
    tsStack = TIFFStack(strFilename);
    
@@ -85,11 +99,20 @@ function TS_UnitTest(strFilename)
    tfStack = ipermute(tfStack, [3 1 2 4]);   
       
    %% - Test inverted stack
+   sTSInfo = getImageInfo(tsStack);
+   fMaxSampleValue = sTSInfo(1).MaxSampleValue;
+   fMinSampleValue = sTSInfo(1).MinSampleValue;
+   
    tsStack.bInvert = true;
-   tfStack = 255 - tfStack;
+   tfStack = fMaxSampleValue - (tfStack - fMinSampleValue);
    TSUT_TestReferencing(tsStack, tfStack, 'Inverted stack');
    tsStack.bInvert = false;
-   tfStack = 255 - tfStack;
+
+   % - Re-extract stack
+   for (nFrame = nNumFrames:-1:1)
+      tfFrame = permute(imread(strFilename, 'Index', nFrame, 'Info', sInfo), [1 2 4 3]);
+      tfStack(:, :, nFrame, :) = tfFrame;
+   end
    
    %% - Test non-accelerated reading funcitons
    w = warning('off', 'TIFFStack:SlowAccess');
@@ -102,12 +125,20 @@ function TS_UnitTest(strFilename)
    nNumFrames = size(tfStack, 3);
 
    % - Test that de-interleaving succeeded
-   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames 1]);   
-   assert(isequal(size(tsStack), [vnStackSize([1 2]) 1 1 nNumFrames 1 vnStackSize(4:end)]), ...
+   tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames 1]);
+   vnTestSize = [vnStackSize([1 2]) 1 1 nNumFrames 1 vnStackSize(4:end)];
+   if (vnTestSize(end) == 1)
+      vnTestSize = vnTestSize(1:(find(vnTestSize == 1, 1, 'last') - 1));
+   end
+   assert(isequal(size(tsStack), vnTestSize), ...
           'TIFFStack:UnitTestFailed', 'De-interleaving the stack was unsuccessful.');
 
    tsStack = TIFFStack(strFilename, [], [1 1 nNumFrames]);   
-   assert(isequal(size(tsStack), [vnStackSize([1 2]) 1 1 nNumFrames vnStackSize(4:end)]), ...
+   vnTestSize = [vnStackSize([1 2]) 1 1 nNumFrames vnStackSize(4:end)];
+   if (vnTestSize(end) == 1)
+      vnTestSize = vnTestSize(1:(find(vnTestSize == 1, 1, 'last') - 1));
+   end
+   assert(isequal(size(tsStack), vnTestSize), ...
           'TIFFStack:UnitTestFailed', 'De-interleaving the stack was unsuccessful.');
 
 	TSUT_assertFail('MATLAB:TIFFStack:expectedInteger', 'TIFFStack(strFilename, [], .5);');

@@ -404,7 +404,7 @@ classdef TIFFStack < handle
                % - Read TIFF header for tiffread31
                [oStack.TIF, oStack.HEADER] = tiffread31_header(strFilename);
 
-               % - Use tiffread29 to get the data class for this tiff
+               % - Use tiffread31 to get the data class for this tiff
                fPixel = tiffread31_readimage(oStack.TIF, oStack.HEADER, 1);
                fPixel = fPixel(1, 1, :);
                oStack.strDataClass = class(fPixel);
@@ -1089,7 +1089,7 @@ end
 
 %% --- Helper functions ---
 
-% TS_read_data_tiffread - FUNCTION Read the requested pixels from the TIFF file (using tiffread29)
+% TS_read_data_tiffread - FUNCTION Read the requested pixels from the TIFF file (using tiffread31)
 %
 % Usage: [tfData] = TS_read_data_imread(oStack, cIndices)
 %
