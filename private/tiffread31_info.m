@@ -170,13 +170,11 @@ while ifd_pos ~= 0
       
       % move to next IFD entry in the file
       file_seek(entry_pos+nIFDTagBytes*(inx-1));
-      
-      % read entry tag
-      entry_tag = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
+
       % read entry
-      entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes);
+      entry = readIFDentry(strTagSizeClass, nInlineBytes);
       
-      switch entry_tag
+      switch entry.tag
          case 256         % image width = number of column
             INFO(img_indx).Width = entry.val;
          case 257         % image height = number of row
@@ -243,11 +241,10 @@ end
 
 %% ==================sub-functions that reads an IFD entry:===================
 
-   function entry = readIFDentry(entry_tag, strTagSizeClass, nInlineBytes)
-      
+   function entry = readIFDentry(strTagSizeClass, nInlineBytes)
+      entry.tag = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
       entry.tiffType = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
       entry.cnt      = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
-      %disp(['tiffType =', num2str(entry.tiffType),', cnt = ',num2str(entry.cnt)]);
       
       try
          entry.nbBytes = nbBytesMap(entry.tiffType);
@@ -259,21 +256,23 @@ end
             rethrow(ME);
          end
       end
-      
+
       if entry.nbBytes * entry.cnt > nInlineBytes
          % next field contains an offset:
          fpos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-         %disp(strcat('offset = ', num2str(offset)));
          file_seek(fpos);
       end
-      
-      if entry_tag == 33629   % metamorph stack plane specifications
+
+      if entry.tag == 33629   % metamorph stack plane specifications
          entry.val = fread(TIF.file, 6*entry.cnt, entry.matlabType, TIF.ByteOrder);
-      elseif entry_tag == 34412  % TIF_CZ_LSMINFO
+
+      elseif entry.tag == 34412  % TIF_CZ_LSMINFO
          entry.val = readLSMinfo;
+
       elseif entry.tiffType == 5  % TIFF 'rational' type
          val = fread(TIF.file, 2*entry.cnt, entry.matlabType, TIF.ByteOrder);
          entry.val = val(1:2:length(val)) ./ val(2:2:length(val));
+
       else
          entry.val = fread(TIF.file, entry.cnt, entry.matlabType, TIF.ByteOrder)';
       end
