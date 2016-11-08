@@ -119,7 +119,7 @@ nbBytesMap = [ ...
 
 matlabTypeMap = { ...
     'uint8',   ... byte
-    'uchar',   ... ascii string
+    '*char',   ... ascii string
     'uint16',  ... word
     'uint32',  ... dword/uword
     'uint32',  ... rational
@@ -271,19 +271,13 @@ end
          entry.val = fread(TIF.file, 6*entry.cnt, entry.matlabType, TIF.ByteOrder);
       elseif entry_tag == 34412  % TIF_CZ_LSMINFO
          entry.val = readLSMinfo;
+      elseif entry.tiffType == 5  % TIFF 'rational' type
+         val = fread(TIF.file, 2*entry.cnt, entry.matlabType, TIF.ByteOrder);
+         entry.val = val(1:2:length(val)) ./ val(2:2:length(val));
       else
-         if entry.tiffType == 5  % TIFF 'rational' type
-            val = fread(TIF.file, 2*entry.cnt, entry.matlabType, TIF.ByteOrder);
-            entry.val = val(1:2:length(val)) ./ val(2:2:length(val));
-         else
-            entry.val = fread(TIF.file, entry.cnt, entry.matlabType, TIF.ByteOrder);
-         end
+         entry.val = fread(TIF.file, entry.cnt, entry.matlabType, TIF.ByteOrder)';
       end
-      
-      if ( entry.tiffType == 2 );
-         entry.val = char(entry.val');
-      end
-      
+
    end
 
 
