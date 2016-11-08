@@ -243,8 +243,9 @@ end
 
    function [entry_tag, entry_val] = readIFDentry(strTagSizeClass, nInlineBytes)
 
-      entry_tag = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
-      tiffType = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
+      buffer = fread(TIF.file, 2, 'uint16', TIF.ByteOrder);
+      entry_tag = buffer(1);
+      tiffType = buffer(2);
       cnt = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
 
       try
