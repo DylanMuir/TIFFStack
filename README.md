@@ -20,9 +20,7 @@ code is used to read image data. `permute`, `ipermute`, `transpose` and
 
 ## Download and install
 
-[Download `TIFFStack`]
-
- Install `TIFFStack` by unpacking the zip file into a directory called
+Clone `TIFFStack` into a directory called
 *@TIFFStack*. The ampersand symbol (@) is important, since it indicates
 to [Matlab] that `TIFFStack` is an object-oriented module. Add the parent
 directory &mdash; not the *@TIFFStack* directory &mdash; to the [Matlab] path.
