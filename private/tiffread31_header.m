@@ -198,8 +198,8 @@ while ifd_pos ~= 0
          case 262         % photometric interpretation
             TIF.PhotometricInterpretation = entry_val;
             if ( TIF.PhotometricInterpretation == 3 )
-               %warning('tiffread:LookUp', 'Ignoring TIFF look-up table');
-               fprintf(2, 'Ignoring TIFF look-up table in %s\n', image_name);
+               warning('tiffread:LookUp', 'Ignoring TIFF look-up table.');
+%                fprintf(2, 'Ignoring TIFF look-up table in %s\n', image_name);
             end
          case 269
             HEADER(img_indx).document_name = entry_val;

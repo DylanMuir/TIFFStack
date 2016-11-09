@@ -419,7 +419,22 @@ classdef TIFFStack < handle
             oStack.fhCastFun = str2func(oStack.strDataClass);
             
             % - Record stack size
-            oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
+            if (oStack.bMTStack)
+               oStack.vnDataSize = vnStackDims;
+               oStack.vnApparentSize = oStack.vnDataSize;
+               
+               % - Initialise dimension order
+               oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
+            
+               % - Permute first two dimensions
+               oStack = permute(oStack, [2 1 3:numel(vnStackDims)]);
+               
+            else
+               oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
+
+               % - Initialise dimension order
+               oStack.vnDimensionOrder = 1:numel(oStack.vnDataSize);
+            end
             
             % - Initialize apparent stack size, de-interleaving along the frame dimension
             if isempty(vnInterleavedFrameDims)
@@ -442,10 +457,8 @@ classdef TIFFStack < handle
             else
                % - Record apparent stack dimensions
                oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnInterleavedFrameDims(:)' oStack.vnDataSize(4)];
+               oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
             end
-            
-            % - Initialise dimension order
-            oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
             
             % - Fix up dimensions order for ImageJ HyperStack
             if (bImageJDeinterleaving)
@@ -655,7 +668,7 @@ classdef TIFFStack < handle
                      end
                      
                      % - Construct referencing subscripts for raw stack
-                     S.subs = [S.subs(1:2) reshape(vnFrameIndices, 1, []) S.subs(end)];
+                     S.subs = [S.subs(1:2) reshape(vnFrameIndices, [], 1) S.subs(end)];
                   end
                end
 
@@ -1793,12 +1806,12 @@ function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFram
          end
          
          % - Deinterleave stack
-         vnStackDims = [sInfo(1).Height sInfo(1).Width nNumFrames*nNumSlices*nNumChannels 1];
+         vnStackDims = [sInfo(1).Width sInfo(1).Height nNumFrames*nNumSlices*nNumChannels 1];
          vnInterleavedFrameDims = [nNumChannels nNumSlices nNumFrames];
          
       else
          % - Extract information about the stack size for a fake big stack
-         vnStackDims = [sInfo(1).Height sInfo(1).Width nNumImages sInfo(1).SamplesPerPixel];
+         vnStackDims = [sInfo(1).Width sInfo(1).Height nNumImages sInfo(1).SamplesPerPixel];
          vnInterleavedFrameDims = [];
       end
    end
