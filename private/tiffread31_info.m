@@ -196,6 +196,8 @@ while ifd_pos ~= 0
             TIF.PlanarConfiguration = entry_val;
          case 339
             TIF.SampleFormat = entry_val;
+         case 305
+            INFO(img_indx).Software = entry_val;
       end
    end
    
