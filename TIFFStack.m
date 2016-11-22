@@ -447,6 +447,7 @@ classdef TIFFStack < handle
                   % - Work out number of apparent frames
                   nNumApparentFrames = oStack.vnDataSize(3) ./ prod(vnInterleavedFrameDims);
                   oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnInterleavedFrameDims(:)' nNumApparentFrames oStack.vnDataSize(4)];
+                  oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
                   
                else
                   % - Incorrect total number of deinterleaved frames
