@@ -1216,9 +1216,9 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    % - Get referencing parameters for TIF object
    w = oStack.vnDataSize(2);
    h = oStack.vnDataSize(1);
-   rps = min(oStack.sImageInfo(1).RowsPerStrip, h);
-   tw = min(oStack.sImageInfo(1).TileWidth, w);
-   th = min(oStack.sImageInfo(1).TileLength, h);
+   vfrps = cellfun(@(rps)nanemptymin(rps, h), {oStack.sImageInfo(cIndices{3}).RowsPerStrip});
+   vftw = cellfun(@(tw)nanemptymin(tw, w), {oStack.sImageInfo(cIndices{3}).TileWidth});
+   vfth = cellfun(@(tw)nanemptymin(tw, h), {oStack.sImageInfo(cIndices{3}).TileLength});
    spp = oStack.sImageInfo(1).SamplesPerPixel;
    
    tlStack = oStack.TIF;
@@ -1246,7 +1246,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
             oStack.fhSetDirFun(tlStack, cIndices{3}(nImage));
             
             % - Read data from this image, overwriting frame buffer
-            [~, tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, []);
+            [~, tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, vfrps(nImage), vftw(nImage), vfth(nImage), []);
             
             % - Resample frame, if required
             if (bResample)
@@ -1281,15 +1281,16 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       
       % - Loop over images in stack and extract required frames
       try
-         for (nImage = unique(cIndices{3}(:))')
+         vnUniqueImages = unique(cIndices{3}(:))';
+         for (nImage = 1:numel(vnUniqueImages))
             % - Find corresponding pixels
-            vbThesePixels = cIndices{3} == nImage;
+            vbThesePixels = cIndices{3} == vnUniqueImages(nImage);
             
             % - Skip to this image in stack
-            oStack.fhSetDirFun(tlStack, nImage);
+            oStack.fhSetDirFun(tlStack, vnUniqueImages(nImage));
 
             % - Read the subsampled pixels from the stack
-            [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, vnFrameLinearIndices(vbThesePixels));
+            [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, vfrps(nImage), vftw(nImage), vfth(nImage), vnFrameLinearIndices(vbThesePixels));
          end
          
       catch mErr
@@ -1465,6 +1466,56 @@ function isvalidsubscript(oRefs)
    end
 end
 
+%% get_full_file_path - FUNCTION Calculate the absolute path to a given (possibly relative) filename
+%
+% Usage: strFullPath = get_full_file_path(strFile)
+%
+% 'strFile' is a filename, which may include relative path elements.  The file
+% does not have to exist.
+%
+% 'strFullPath' will be the absolute path to the file indicated in 'strFile'.
+
+function strFullPath = get_full_file_path(strFile)
+
+   try
+      fid = fopen(strFile);
+      strFile = fopen(fid);
+      fclose(fid);
+      
+      [strDir, strName, strExt] = fileparts(strFile);
+      
+      if (isempty(strDir))
+         strDir = '.';
+         strFullDirPath = cd(cd(strDir));
+         strFullPath = fullfile(strFullDirPath, [strName strExt]);
+      else
+         strFullPath = strFile;
+      end
+      
+   catch mErr
+      % - Close file id, if necessary
+      if (ismember(fid, fopen('all')))
+         fclose(fid);
+      end
+      
+      % - Record error state
+      base_ME = MException('TIFFStack:ReadError', ...
+         '*** TIFFStack: Could not open file [%s].', strFile);
+      new_ME = addCause(base_ME, mErr);
+      throw(new_ME);
+   end
+end
+
+% iscolon - FUNCTION Test whether a reference is equal to ':'
+function bIsColon = iscolon(ref)
+   bIsColon = ischar(ref) && isequal(ref, ':');
+end
+
+% nanemptymin - FUNCTION Test for a min or nan or empty
+function fVal = nanemptymin(fVal, fTestVal)
+   fVal(isempty(fVal)) = fTestVal;
+   fVal(isnan(fVal)) = fTestVal;
+end
 
 %% Accelerated Libtiff reading functions
 
@@ -1675,51 +1726,6 @@ function tagValue = TiffgetTag(oTiff,tagId)
    end
 end
 
-
-% get_full_file_path - FUNCTION Calculate the absolute path to a given (possibly relative) filename
-%
-% Usage: strFullPath = get_full_file_path(strFile)
-%
-% 'strFile' is a filename, which may include relative path elements.  The file
-% does not have to exist.
-%
-% 'strFullPath' will be the absolute path to the file indicated in 'strFile'.
-
-function strFullPath = get_full_file_path(strFile)
-
-   try
-      fid = fopen(strFile);
-      strFile = fopen(fid);
-      fclose(fid);
-      
-      [strDir, strName, strExt] = fileparts(strFile);
-      
-      if (isempty(strDir))
-         strDir = '.';
-         strFullDirPath = cd(cd(strDir));
-         strFullPath = fullfile(strFullDirPath, [strName strExt]);
-      else
-         strFullPath = strFile;
-      end
-      
-   catch mErr
-      % - Close file id, if necessary
-      if (ismember(fid, fopen('all')))
-         fclose(fid);
-      end
-      
-      % - Record error state
-      base_ME = MException('TIFFStack:ReadError', ...
-         '*** TIFFStack: Could not open file [%s].', strFile);
-      new_ME = addCause(base_ME, mErr);
-      throw(new_ME);
-   end
-end
-
-% iscolon - FUNCTION Test whether a reference is equal to ':'
-function bIsColon = iscolon(ref)
-   bIsColon = ischar(ref) && isequal(ref, ':');
-end
 
 %% -- MEX-handling functions
 
