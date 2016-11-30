@@ -57,11 +57,12 @@ function TS_UnitTest(strFilename)
 
       % - Find unit test bigtiff file
       strFilename = fullfile(strTSDir, 'private', 'TS_UnitTestImage_BigTIFF.tif');
+      TSUT_RunTestsOnFile(strFilename);
 
       % - Find unit test ImageJ Big stack file
       % Currently not integrated into unit test
-      strFilename = fullfile(strTSDir, 'private', 'TS_UnitTestImage_ImageJ_BigStack_8frames.tif');
-      TSUT_RunTestsOnFile(strFilename);
+      % strFilename = fullfile(strTSDir, 'private', 'TS_UnitTestImage_ImageJ_BigStack_8frames.tif');
+      % TSUT_RunTestsOnFile(strFilename);
    end
 end
 
