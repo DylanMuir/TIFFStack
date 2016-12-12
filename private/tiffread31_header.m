@@ -1,4 +1,4 @@
-function [TIF, HEADER] = tiffread31_header(file_name)
+function [TIF, HEADER, INFO] = tiffread31_header(file_name)
 
 %% set defaults values:
 
@@ -16,6 +16,7 @@ opt.DistributeMetaData = true;
 TIF = struct('ByteOrder', 'ieee-le');  % byte order string
 TIF.SamplesPerPixel = 1;
 HEADER.SamplesPerPixel = 1;
+INFO.SamplesPerPixel = 1;
 TIF.PlanarConfiguration = 1;
 
 % obtain the full file path:
@@ -41,9 +42,11 @@ bos = fread(TIF.file, 2, '*char');
 if ( strcmp(bos', 'II') )
    TIF.ByteOrder = 'ieee-le';  % Intel little-endian format
    HEADER.ByteOrder = 'little-endian';
+   INFO.ByteOrder = 'little-endian';
 elseif ( strcmp(bos','MM') )
    TIF.ByteOrder = 'ieee-be';
    HEADER.ByteOrder = 'big-endian';
+   INFO.ByteOrder = 'big-endian';
 else
    error('This is not a TIFF file (no MM or II).');
 end
@@ -99,42 +102,42 @@ end
 %% Maps to accelerate types conversions in readIFDentry function
 
 nbBytesMap = [ ...
-    1, ... byte
-    1, ... ascii string
-    2, ... word
-    4, ... dword/uword
-    8, ... rational
-    1, ... signed byte
-    1, ... undefined
-    2, ... signed short
-    4, ... signed long
-    8, ... long rational
-    4, ... ???
-    8, ... ???
-    4, ... TIFF_IFD
-    8, ... Long8
-    8, ... SLong8
-    8, ... Unsigned IFD offet 8 bytes
-];
+   1, ... byte
+   1, ... ascii string
+   2, ... word
+   4, ... dword/uword
+   8, ... rational
+   1, ... signed byte
+   1, ... undefined
+   2, ... signed short
+   4, ... signed long
+   8, ... long rational
+   4, ... ???
+   8, ... ???
+   4, ... TIFF_IFD
+   8, ... Long8
+   8, ... SLong8
+   8, ... Unsigned IFD offet 8 bytes
+   ];
 
 matlabTypeMap = { ...
-    'uint8',   ... byte
-    '*char',   ... ascii string
-    'uint16',  ... word
-    'uint32',  ... dword/uword
-    'uint32',  ... rational
-    'int8',    ... signed byte
-    'uchar',   ... undefined
-    'int16',   ... signed short
-    'int32',   ... signed long
-    'int32',   ... long rational
-    'float32', ... ???
-    'float64', ... ???
-    'uint32',  ... TIFF_IFD
-    'uint64',  ... Long8
-    'int64',   ... SLong8
-    'uint64',  ... Unsigned IFD offet 8 bytes
-};
+   'uint8',   ... byte
+   '*char',   ... ascii string
+   'uint16',  ... word
+   'uint32',  ... dword/uword
+   'uint32',  ... rational
+   'int8',    ... signed byte
+   'uchar',   ... undefined
+   'int16',   ... signed short
+   'int32',   ... signed long
+   'int32',   ... long rational
+   'float32', ... ???
+   'float64', ... ???
+   'uint32',  ... TIFF_IFD
+   'uint64',  ... Long8
+   'int64',   ... SLong8
+   'uint64',  ... Unsigned IFD offet 8 bytes
+   };
 
 %% ---- read the image file directories (IFDs)
 
@@ -170,7 +173,7 @@ while ifd_pos ~= 0
       
       % move to next IFD entry in the file
       file_seek(entry_pos+nIFDTagBytes*(inx-1));
-
+      
       % read entry
       [entry_tag, entry_val, entry_cnt] = readIFDentry(strTagSizeClass, nInlineBytes);
       
@@ -199,7 +202,7 @@ while ifd_pos ~= 0
             TIF.PhotometricInterpretation = entry_val;
             if ( TIF.PhotometricInterpretation == 3 )
                warning('tiffread:LookUp', 'Ignoring TIFF look-up table.');
-%                fprintf(2, 'Ignoring TIFF look-up table in %s\n', image_name);
+               %                fprintf(2, 'Ignoring TIFF look-up table in %s\n', image_name);
             end
          case 269
             HEADER(img_indx).document_name = entry_val;
@@ -240,7 +243,7 @@ while ifd_pos ~= 0
          case 315
             HEADER(img_indx).artist         = entry_val;
          case 317        %predictor for compression
-            if (entry_val ~= 1); error('unsuported predictor value'); end
+            if (entry_val ~= 1); error('Unsuported predictor value.'); end
          case 320         % color map
             HEADER(img_indx).cmap           = entry_val;
             HEADER(img_indx).colors         = entry_cnt/3;
@@ -253,11 +256,11 @@ while ifd_pos ~= 0
                %the existence of the variable indicates that we are
                %handling a Andor generated file
                HEADER(img_indx).ANDOR = struct([]);
-      end
+            end
          case 4869       %ANDOR tag: temperature in Celsius when stabilized
             if ~(entry_val == -999)
                HEADER(img_indx).ANDOR.temperature = entry_val;
-   end
+            end
          case 4876       %exposure time in seconds
             HEADER(img_indx).ANDOR.exposureTime   = entry_val;
          case 4878
@@ -310,7 +313,7 @@ while ifd_pos ~= 0
             HEADER(img_indx).ANDOR.chipYSize  = entry_val;
          case 4944
             HEADER(img_indx).ANDOR.baselineOffset = entry_val;
-   
+            
          case 33550       % GeoTIFF
             HEADER(img_indx).ModelPixelScaleTag = entry_val;
          case 33628       % Metamorph specific data
@@ -347,15 +350,34 @@ while ifd_pos ~= 0
                fprintf( 'Unknown TIFF entry with tag %i (cnt %i)\n', entry_tag, entry_cnt);
             end
       end
+
+      % - Handle information needed for INFO structure
+      INFO(img_indx).index = img_indx;
+      switch entry_tag
+         case 256         % image width = number of column
+            INFO(img_indx).Width = entry_val;
+         case 257         % image height = number of row
+            INFO(img_indx).Height = entry_val;
+         case 258
+            INFO(img_indx).BitsPerSample = entry_val;
+         case 270         % general comments:
+            INFO(img_indx).ImageDescription = entry_val;
+         case 277
+            INFO(img_indx).SamplesPerPixel = entry_val;
+            %fprintf('Color image: sample_per_pixel=%i\n',  TIF.SamplesPerPixel);
+         case 278
+            INFO(img_indx).RowsPerStrip = entry_val;
+         case 305
+            INFO(img_indx).Software = entry_val;
+      end
       
-      % calculate bounding box  if you've got the stuff
+      % - Calculate the bounding box  if we have the required information
       if isfield(HEADER, 'ModelPixelScaleTag') && isfield(HEADER, 'ModelTiePointTag') && isfield(HEADER, 'height')&& isfield(HEADER, 'width'),
          HEADER(img_indx).North=HEADER(img_indx).ModelTiePointTag(5)-HEADER(img_indx).ModelPixelScaleTag(2)*HEADER(img_indx).ModelTiePointTag(2);
          HEADER(img_indx).South=HEADER(img_indx).North-HEADER(img_indx).height*HEADER(img_indx).ModelPixelScaleTag(2);
          HEADER(img_indx).West=HEADER(img_indx).ModelTiePointTag(4)+HEADER(img_indx).ModelPixelScaleTag(1)*HEADER(img_indx).ModelTiePointTag(1);
          HEADER(img_indx).East=HEADER(img_indx).West+HEADER(img_indx).width*HEADER(img_indx).ModelPixelScaleTag(1);
       end
-      
    end
    
    
@@ -365,12 +387,6 @@ while ifd_pos ~= 0
    else
       TIF.BytesPerPlane = HEADER(img_indx).width * HEADER(img_indx).height * TIF.BytesPerSample;
    end
-   
-   % try to consolidate the TIFF strips if possible
-   
-   if opt.ConsolidateStrips
-      consolidate_strips(TIF.BytesPerPlane);
-end
 end
 
 % determine the type of data stored in the pixels:
@@ -382,16 +398,33 @@ end
 switch( SampleFormat )
    case 1
       TIF.classname = sprintf('uint%i', TIF.BitsPerSample(1));
+      [INFO.MaxSampleValue] = deal(2.^TIF.BitsPerSample - 1);
+      [INFO.MinSampleValue] = deal(0);
+
    case 2
       TIF.classname = sprintf('int%i', TIF.BitsPerSample(1));
+      [INFO.MaxSampleValue] = deal(2.^(TIF.BitsPerSample-1) - 1);
+      [INFO.MinSampleValue] = deal(-2.^(TIF.BitsPerSample-1));
+   
    case 3
       if (TIF.BitsPerSample(1) == 32 )
          TIF.classname = 'single';
+         [INFO.MaxSampleValue] = realmax('single');
+         [INFO.MinSampleValue] = -realmax('single');
       else
          TIF.classname = 'double';
+         [INFO.MaxSampleValue] = realmax('double');
+         [INFO.MinSampleValue] = -realmax('double');
       end
+      
    otherwise
       error('TIFFStack:Format', '*** TIFFStack: Error: Unsuported TIFF sample format [%i].', SampleFormat);
+end
+
+% - Try to consolidate the TIFF strips if possible
+
+if opt.ConsolidateStrips
+   consolidate_strips(TIF.BytesPerPlane);
 end
 
 
@@ -403,7 +436,6 @@ end
          error('Invalid file offset (invalid fseek)');
       end
    end
-
 
    function consolidate_strips(BytesPerPlane)
       
@@ -437,12 +469,12 @@ end
 %% ==================sub-functions that reads an IFD entry:===================
 
    function [entry_tag, entry_val, entry_cnt] = readIFDentry(strTagSizeClass, nInlineBytes)
-
+      
       buffer = fread(TIF.file, 2, 'uint16', TIF.ByteOrder);
       entry_tag = buffer(1);
       tiffType = buffer(2);
       entry_cnt = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
-
+      
       try
          nbBytes = nbBytesMap(tiffType);
          matlabType = matlabTypeMap{tiffType};
@@ -453,27 +485,27 @@ end
             rethrow(ME);
          end
       end
-
+      
       if nbBytes * entry_cnt > nInlineBytes
          % next field contains an offset
          fpos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
          file_seek(fpos);
       end
-
+      
       if entry_tag == 33629   % metamorph stack plane specifications
          entry_val = fread(TIF.file, 6 * entry_cnt, matlabType, TIF.ByteOrder);
-
+         
       elseif entry_tag == 34412  % TIF_CZ_LSMINFO
          entry_val = readLSMinfo();
-
+         
       elseif tiffType == 5  % TIFF 'rational' type
          val = fread(TIF.file, 2 * entry_cnt, matlabType, TIF.ByteOrder);
          entry_val = val(1:2:end) ./ val(2:2:end);
-
+         
       else
          entry_val = fread(TIF.file, entry_cnt, matlabType, TIF.ByteOrder)';
       end
-
+      
    end
 
 

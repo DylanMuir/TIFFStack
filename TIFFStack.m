@@ -231,9 +231,10 @@ classdef TIFFStack < handle
          oStack.strFilename = strFilename;
          
          % - Get image information
-         try
-            % - Read and save image information (using tiffread for speed and compatibility)
-            [~, sInfo] = tiffread31_info(strFilename);
+%          try
+            % - Read and store image information (using tiffread for speed and compatibility)
+            [oStack.TIF, oStack.HEADER, sInfo] = tiffread31_header(strFilename);
+            fclose(oStack.TIF.file);
 
             % - Read and save image information (using imfinfo for BigTIFF compatibility)
 %             sInfo = imfinfo(strFilename);
@@ -253,8 +254,15 @@ classdef TIFFStack < handle
                   bIsImageJHyperStack = false;
                   
                   warning('TIFFStack:ImageJBigStackUnsupported', ...
-                          '--- TIFFStack: This is an ImageJ "fake" TIF file. MappedTensor must be available to read this file.');
+                          '--- TIFFStack: Warning: This is an ImageJ "fake" TIF file. MappedTensor must be available to read this file.');
                end
+            end
+            
+            % - Detect a very long stack
+            if ((numel(sInfo) > 2^16) && oStack.bUseTiffLib)
+               warning('TIFFStack:LongStack', ...
+                       '--- TIFFSTack: Warning: This stack has more than 2^16 frames, so Matlab/tifflib cannot read it natively.\n       Using slower non-Tifflib access.');
+               oStack.bUseTiffLib = false;
             end
             
             % - Deinterleave hyperstacks automatically
@@ -266,7 +274,7 @@ classdef TIFFStack < handle
             % - Initialise object, depending on underlying access method
             if (oStack.bMTStack)
                % - Fix up stack size
-               sInfo = repmat(sInfo, vnStackDims(3), 1);
+               sInfo = repmat(sInfo(1), vnStackDims(3), 1);
                
             elseif (oStack.bUseTiffLib)
                % - Create a Tiff object
@@ -403,7 +411,8 @@ classdef TIFFStack < handle
                
             else
                % - Read TIFF header for tiffread31
-               [oStack.TIF, oStack.HEADER] = tiffread31_header(strFilename);
+               % [oStack.TIF, oStack.HEADER] = tiffread31_header(strFilename);
+               oStack.TIF.file = fopen(strFilename, 'r', 'l');
 
                % - Use tiffread31 to get the data class for this tiff
                fPixel = tiffread31_readimage(oStack.TIF, oStack.HEADER, 1);
@@ -469,12 +478,12 @@ classdef TIFFStack < handle
             % - Record image information
             oStack.sImageInfo = sInfo;
             
-         catch mErr
-            base_ME = MException('TIFFStack:InvalidFile', ...
-                  '*** TIFFStack: Could not open file [%s].', strFilename);
-            new_ME = addCause(base_ME, mErr);
-            throw(new_ME);
-         end
+%          catch mErr
+%             base_ME = MException('TIFFStack:InvalidFile', ...
+%                   '*** TIFFStack: Could not open file [%s].', strFilename);
+%             new_ME = addCause(base_ME, mErr);
+%             throw(new_ME);
+%          end
       end
       
       % delete - DESTRUCTOR
@@ -731,11 +740,11 @@ classdef TIFFStack < handle
       % size - METHOD Overloaded size function
       function [varargout] = size(oStack, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
-         vnApparentSize = oStack.vnApparentSize; %#ok<PROP>
-         vnApparentSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROP>
+         vnApparentSize = oStack.vnApparentSize; %#ok<PROPLC,PROP>
+         vnApparentSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROPLC,PROP>
          
          % - Return the size of the tensor data element, permuted
-         vnSize = vnApparentSize(oStack.vnDimensionOrder); %#ok<PROP>
+         vnSize = vnApparentSize(oStack.vnDimensionOrder); %#ok<PROPLC,PROP>
          
          % - Trim trailing unitary dimensions
          vbIsUnitary = vnSize == 1;
@@ -980,7 +989,7 @@ classdef TIFFStack < handle
          end
          
          % - Construct a casting function
-         fhCastFun = str2func(strClass); %#ok<PROP>
+         fhCastFun = str2func(strClass); %#ok<PROPLC,PROP>
          
          % - Set up referencing
          sSubs.type = '()';
@@ -990,7 +999,7 @@ classdef TIFFStack < handle
          tfStack = subsref(oStack, sSubs);
          
          % - Cast the result
-         tfStack = fhCastFun(tfStack); %#ok<PROP>
+         tfStack = fhCastFun(tfStack); %#ok<PROPLC,PROP>
       end
 
       function tfStack = double(oStack)
