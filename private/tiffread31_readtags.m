@@ -1,4 +1,4 @@
-function [TIF, HEADER, INFO] = tiffread31_header(file_name)
+function [sTags] = tiffread31_readtags(TIF, HEADER, vnFrame)
 
 %% set defaults values:
 
@@ -6,97 +6,6 @@ opt.ReadUnknownTags = true;
 opt.ConsolidateStrips = true;
 opt.SimilarImages = false;
 opt.DistributeMetaData = true;
-
-% the structure IMG is returned to the user, while TIF is not.
-% so tags usefull to the user should be stored as fields in IMG, while
-% those used only internally can be stored in TIF.
-% the structure ANDOR has additional header information which is added to
-% each plane of the image eventually
-
-TIF = struct('ByteOrder', 'ieee-le');  % byte order string
-TIF.SamplesPerPixel = 1;
-HEADER.SamplesPerPixel = 1;
-INFO.SamplesPerPixel = 1;
-TIF.PlanarConfiguration = 1;
-
-% obtain the full file path:
-[status, file_attrib] = fileattrib(file_name);
-
-if status == 0
-   error('tiffread3:filenotfound', ['File "',file_name,'" not found.']);
-end
-
-file_name = file_attrib.Name;
-
-% open file for reading
-TIF.file = fopen(file_name,'r','l');
-
-% obtain the short file name:
-[~, name, ext] = fileparts(file_name);
-TIF.image_name = [name, ext];
-TIF.file_name = file_name; %#ok<*AGROW>
-
-
-%% ---- read byte order: II = little endian, MM = big endian
-
-bos = fread(TIF.file, 2, '*char');
-if ( strcmp(bos', 'II') )
-   TIF.ByteOrder = 'ieee-le';  % Intel little-endian format
-   INFO.ByteOrder = 'little-endian';
-elseif ( strcmp(bos','MM') )
-   TIF.ByteOrder = 'ieee-be';
-   INFO.ByteOrder = 'big-endian';
-else
-   error('This is not a TIFF file (no MM or II).');
-end
-
-
-%% ---- read in a number which identifies TIFF format
-
-TIF.tiff_id = fread(TIF.file,1,'uint16', TIF.ByteOrder);
-
-if (TIF.tiff_id ~= 42) && (TIF.tiff_id ~= 43)
-   error('This is not a TIFF file (missing 42 or 43).');
-end
-
-% - By default, read 4-byte pointers
-TIF.strIFDNumEntriesSize = 'uint16';
-TIF.strIFDClassSize = 'uint32';
-TIF.nIFDTagBytes = 12;
-TIF.nIFDClassBytes = 2;
-TIF.strTagSizeClass = 'uint32';
-TIF.nInlineBytes = 4;
-
-% - Handle a BigTIFF file
-if (TIF.tiff_id == 43)
-   TIF.offset_size = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
-   test_val = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
-   
-   % - Test check value
-   if (test_val ~= 0)
-      error('This is not a valid BigTIFF file (invalid test value).');
-   end
-   
-   % - Get IFD pointer data class
-   switch (TIF.offset_size)
-      case 8
-         TIF.strIFDNumEntriesSize = 'uint64';
-         TIF.strIFDClassSize = 'uint64';
-         TIF.nIFDClassBytes = 8;
-         
-      case 16
-         TIF.strIFDNumEntriesSize = 'uint64';
-         TIF.strIFDClassSize = '2*uint64';
-         TIF.nIFDClassBytes = 16;
-         
-      otherwise
-         error('Unknown IFD pointer size for BigTIFF file.');
-   end
-   
-   TIF.nIFDTagBytes = 20;
-   TIF.strTagSizeClass = 'uint64';
-   TIF.nInlineBytes = 8;
-end
 
 %% Maps to accelerate types conversions in readIFDentry function
 
@@ -140,29 +49,21 @@ matlabTypeMap = { ...
 
 %% ---- read the image file directories (IFDs)
 
-ifd_pos   = fread(TIF.file, 1, TIF.strIFDClassSize, TIF.ByteOrder);
-img_indx  = 0;
-
-while ifd_pos ~= 0
-   
-   img_indx = img_indx + 1;
-   
-   HEADER(img_indx).index = img_indx;
-   HEADER(img_indx).ifd_pos = ifd_pos;
+for (img_indx = 1:numel(vnFrame))
    
    % move in the file to the next IFD
-   file_seek(ifd_pos);
+   file_seek(HEADER(vnFrame(img_indx)).ifd_pos);
+   sTags(img_indx).IFDPosition = HEADER(vnFrame(img_indx)).ifd_pos;
    
    %read in the number of IFD entries
    num_entries = fread(TIF.file,1,TIF.strIFDNumEntriesSize, TIF.ByteOrder);
    %fprintf('num_entries = %i\n', num_entries);
    
    % store current position:
-   entry_pos = ifd_pos+TIF.nIFDClassBytes;
+   entry_pos = HEADER(vnFrame(img_indx)).ifd_pos+TIF.nIFDClassBytes;
    
    % read the next IFD address:
-   file_seek(ifd_pos+TIF.nIFDTagBytes*num_entries+TIF.nIFDClassBytes);
-   ifd_pos = fread(TIF.file, 1, TIF.strIFDClassSize, TIF.ByteOrder);
+   file_seek(HEADER(vnFrame(img_indx)).ifd_pos+TIF.nIFDTagBytes*num_entries+TIF.nIFDClassBytes);
    
    %fprintf('reading IFD %i at position %i\n', img_indx, ifd_pos);
    
@@ -177,73 +78,183 @@ while ifd_pos ~= 0
       
       %fprintf('found entry with tag %i\n', entry_tag);
       
-      
       % not all valid tiff tags have been included, but tags can easily be added to this code
       % See the official list of tags:
       % http://partners.adobe.com/asn/developer/pdfs/tn/TIFF6.pdf
       switch entry_tag
          case 256         % image width = number of column
-            HEADER(img_indx).width = entry_val;
-            INFO(img_indx).Width = entry_val;
+            sTags(img_indx).Width = entry_val;
          case 257         % image height = number of row
-            HEADER(img_indx).height = entry_val;
-            TIF.ImageLength = entry_val;
-            INFO(img_indx).Height = entry_val;
+            sTags(img_indx).Height = entry_val;
          case 258
-            TIF.BitsPerSample = entry_val;
-            TIF.BytesPerSample = TIF.BitsPerSample / 8;
-            HEADER(img_indx).bits = TIF.BitsPerSample(1);
-            INFO(img_indx).BitsPerSample = entry_val;
+            sTags(img_indx).BitsPerSample = entry_val;
             %fprintf('BitsPerSample %i %i %i\n', entry_val);
          case 259         % compression
-            if ( entry_val ~= 1 )
-               error('TIFFStack:Compression', ['Compression format ', num2str(entry_val),' not supported.']);
-            end
+            sTags(img_indx).Compression = entry_val;
          case 262         % photometric interpretation
-            TIF.PhotometricInterpretation = entry_val;
-            if ( TIF.PhotometricInterpretation == 3 )
-               warning('tiffread:LookUp', 'Ignoring TIFF look-up table.');
-               %                fprintf(2, 'Ignoring TIFF look-up table in %s\n', image_name);
-            end
+            sTags(img_indx).PhotometricInterpretation = entry_val;
+         case 269
+            sTags(img_indx).DocumentName = entry_val;
+         case 270         % general comments:
+            sTags(img_indx).ImageDescription = entry_val;
+         case 271
+            sTags(img_indx).make = entry_val;
          case 273         % strip offset
-            HEADER(img_indx).StripOffsets = entry_val;
-            HEADER(img_indx).StripNumber = entry_cnt;
+            sTags(img_indx).StripOffsets = entry_val;
+            sTags(img_indx).StripNumber = entry_cnt;
             %fprintf('StripNumber = %i, size(StripOffsets) = %i %i\n', TIF.StripNumber, size(TIF.StripOffsets));
+         case 274
+            % orientation is read, but the matrix is not rotated
+            if ( 1 < entry_val ) && ( entry_val < 9 )
+               sTags(img_indx).OrientationID = entry_val;
+               keys = {'TopLeft', 'TopRight', 'BottomRight', 'BottomLeft', 'LeftTop', 'RightTop', 'RightBottom', 'LeftBottom'};
+               sTags(img_indx).Orientation = keys{entry_val};
+            end
          case 277
-            TIF.SamplesPerPixel  = entry_val;
-            INFO(img_indx).SamplesPerPixel = entry_val;
+            sTags(img_indx).SamplesPerPixel = entry_val;
             %fprintf('Color image: sample_per_pixel=%i\n',  TIF.SamplesPerPixel);
          case 278
-            INFO(img_indx).RowsPerStrip = entry_val;
-            HEADER(img_indx).RowsPerStrip   = entry_val;
+            sTags(img_indx).RowsPerStrip   = entry_val;
          case 279         % strip byte counts - number of bytes in each strip after any compressio
-            HEADER(img_indx).StripByteCounts= entry_val;
+            sTags(img_indx).StripByteCounts= entry_val;
+         case 282
+            sTags(img_indx).XResolution   = entry_val;
+         case 283
+            sTags(img_indx).YResolution   = entry_val;
          case 284         % planar configuration describe the order of RGB
-            TIF.PlanarConfiguration = entry_val;
+            sTags(img_indx).PlanarConfiguration = entry_val;
+         case 296
+            sTags(img_indx).ResolutionUnit= entry_val;
+         case 305
+            sTags(img_indx).Software = entry_val;
+         case 306
+            sTags(img_indx).FileModDate       = entry_val;
+         case 315
+            sTags(img_indx).Artist = entry_val;
          case 317        %predictor for compression
-            if (entry_val ~= 1); error('Unsuported predictor value.'); end
+            sTags(img_indx).CompressionPredictorVal = entry_val;
          case 320         % color map
-            HEADER(img_indx).cmap           = entry_val;
-            HEADER(img_indx).colors         = entry_cnt/3;
+            sTags(img_indx).Colormap           = entry_val;
+            sTags(img_indx).NumColors         = entry_cnt/3;
          case 339
-            TIF.SampleFormat   = entry_val;
+            sTags(img_indx).SampleFormat   = entry_val;
+            
+            % ANDOR tags
+         case 4864
+            if ~exist('ANDOR', 'var')
+               %the existence of the variable indicates that we are
+               %handling a Andor generated file
+               sTags(img_indx).ANDOR = struct([]);
+            end
+         case 4869       %ANDOR tag: temperature in Celsius when stabilized
+            if ~(entry_val == -999)
+               sTags(img_indx).ANDOR.temperature = entry_val;
+            end
+         case 4876       %exposure time in seconds
+            sTags(img_indx).ANDOR.exposureTime   = entry_val;
+         case 4878
+            sTags(img_indx).ANDOR.kineticCycleTime = entry_val;
+         case 4879       %number of accumulations
+            sTags(img_indx).ANDOR.nAccumulations = entry_val;
+         case 4881
+            sTags(img_indx).ANDOR.acquisitionCycleTime = entry_val;
+         case 4882       %Readout time in seconds, 1/readoutrate
+            sTags(img_indx).ANDOR.readoutTime = entry_val;
+         case 4884
+            if (entry_val == 9)
+               sTags(img_indx).ANDOR.isPhotonCounting = 1;
+            else
+               sTags(img_indx).ANDOR.isPhotonCounting = 0;
+            end
+         case 4885         %EM DAC level
+            sTags(img_indx).ANDOR.emDacLevel = entry_val;
+         case 4890
+            sTags(img_indx).ANDOR.nFrames = entry_val;
+         case 4896
+            sTags(img_indx).ANDOR.isFlippedHorizontally = entry_val;
+         case 4897
+            sTags(img_indx).ANDOR.isFlippedVertically = entry_val;
+         case 4898
+            sTags(img_indx).ANDOR.isRotatedClockwise = entry_val;
+         case 4899
+            sTags(img_indx).ANDOR.isRotatedAnticlockwise = entry_val;
+         case 4904
+            sTags(img_indx).ANDOR.verticalClockVoltageAmplitude = entry_val;
+         case 4905
+            sTags(img_indx).ANDOR.verticalShiftSpeed = entry_val;
+         case 4907
+            sTags(img_indx).ANDOR.preAmpSetting = entry_val;
+         case 4908         %Camera Serial Number
+            sTags(img_indx).ANDOR.serialNumber = entry_val;
+         case 4911       %Actual camera temperature when not equal to -999
+            if ~(entry_val == -999)
+               sTags(img_indx).ANDOR.unstabilizedTemperature = entry_val;
+            end
+         case 4912
+            sTags(img_indx).ANDOR.isBaselineClamped = entry_val;
+         case 4913
+            sTags(img_indx).ANDOR.nPrescans = entry_val;
+         case 4914
+            sTags(img_indx).ANDOR.model = entry_val;
+         case 4915
+            sTags(img_indx).ANDOR.chipXSize = entry_val;
+         case 4916
+            sTags(img_indx).ANDOR.chipYSize  = entry_val;
+         case 4944
+            sTags(img_indx).ANDOR.baselineOffset = entry_val;
+            
+         case 33550       % GeoTIFF
+            sTags(img_indx).ModelPixelScaleTag = entry_val;
+         case 33628       % Metamorph specific data
+            sTags(img_indx).MM_private1 = entry_val;
+         case 33629       % this tag identify the image as a Metamorph stack!
+            sTags(img_indx).MM_stack = entry_val;
+            sTags(img_indx).MM_stackCnt = entry_cnt;
+         case 33630       % Metamorph stack data: wavelength
+            sTags(img_indx).MM_wavelength = entry_val;
+         case 33631       % Metamorph stack data: gain/background?
+            sTags(img_indx).MM_private2 = entry_val;
+            
+         case 33922       % GeoTIFF
+            sTags(img_indx).ModelTiePointTag = entry_val;
+         case 34412       % Zeiss LSM data
+            sTags(img_indx).LSM_info = entry_val;
+         case 34735       % GeoTIFF
+            sTags(img_indx).GeoKeyDirTag = entry_val;
+         case 34737       % GeoTIFF
+            sTags(img_indx).GeoASCII = entry_val;
+         case 42113       % GeoTIFF
+            sTags(img_indx).GDAL_NODATA = entry_val;
+            
+         case 50838       % Adobe
+            sTags(img_indx).meta_data_byte_counts = entry_val;
+         case 50839       % Adobe
+            sTags(img_indx).meta_data = entry_val;
+            
+         otherwise
+            if opt.ReadUnknownTags
+               sTags(img_indx).(['tag', num2str(entry_tag)])=entry_val;
+               %eval(['IMG(img_indx+1).Tag',num2str(entry_tag),'=',entry_val,';']);
+            else
+               fprintf( 'Unknown TIFF entry with tag %i (cnt %i)\n', entry_tag, entry_cnt);
+            end
       end
 
       % - Calculate the bounding box  if we have the required information
-      if isfield(HEADER, 'ModelPixelScaleTag') && isfield(HEADER, 'ModelTiePointTag') && isfield(HEADER, 'height')&& isfield(HEADER, 'width'),
-         HEADER(img_indx).North=HEADER(img_indx).ModelTiePointTag(5)-HEADER(img_indx).ModelPixelScaleTag(2)*HEADER(img_indx).ModelTiePointTag(2);
-         HEADER(img_indx).South=HEADER(img_indx).North-HEADER(img_indx).height*HEADER(img_indx).ModelPixelScaleTag(2);
-         HEADER(img_indx).West=HEADER(img_indx).ModelTiePointTag(4)+HEADER(img_indx).ModelPixelScaleTag(1)*HEADER(img_indx).ModelTiePointTag(1);
-         HEADER(img_indx).East=HEADER(img_indx).West+HEADER(img_indx).width*HEADER(img_indx).ModelPixelScaleTag(1);
+      if isfield(sTags, 'ModelPixelScaleTag') && isfield(sTags, 'ModelTiePointTag') && isfield(sTags, 'Height')&& isfield(sTags, 'Width'),
+         sTags(img_indx).North=sTags(img_indx).ModelTiePointTag(5)-sTags(img_indx).ModelPixelScaleTag(2)*sTags(img_indx).ModelTiePointTag(2);
+         sTags(img_indx).South=sTags(img_indx).North-sTags(img_indx).height*sTags(img_indx).ModelPixelScaleTag(2);
+         sTags(img_indx).West=sTags(img_indx).ModelTiePointTag(4)+sTags(img_indx).ModelPixelScaleTag(1)*sTags(img_indx).ModelTiePointTag(1);
+         sTags(img_indx).East=sTags(img_indx).West+sTags(img_indx).width*sTags(img_indx).ModelPixelScaleTag(1);
       end
    end
    
    
    % total number of bytes per image:
    if TIF.PlanarConfiguration == 1
-      TIF.BytesPerPlane = TIF.SamplesPerPixel * HEADER(img_indx).width * HEADER(img_indx).height * TIF.BytesPerSample;
+      sTags(img_indx).BytesPerPlane = TIF.SamplesPerPixel * sTags(img_indx).Width * sTags(img_indx).Height * TIF.BytesPerSample;
    else
-      TIF.BytesPerPlane = HEADER(img_indx).width * HEADER(img_indx).height * TIF.BytesPerSample;
+      sTags(img_indx).BytesPerPlane = sTags(img_indx).Width * sTags(img_indx).Height * TIF.BytesPerSample;
    end
 end
 
@@ -255,24 +266,20 @@ end
 
 switch( SampleFormat )
    case 1
-      TIF.classname = sprintf('uint%i', TIF.BitsPerSample(1));
-      [INFO.MaxSampleValue] = deal(2.^TIF.BitsPerSample - 1);
-      [INFO.MinSampleValue] = deal(0);
+      [sTags.MaxSampleValue] = deal(2.^TIF.BitsPerSample - 1);
+      [sTags.MinSampleValue] = deal(0);
 
    case 2
-      TIF.classname = sprintf('int%i', TIF.BitsPerSample(1));
-      [INFO.MaxSampleValue] = deal(2.^(TIF.BitsPerSample-1) - 1);
-      [INFO.MinSampleValue] = deal(-2.^(TIF.BitsPerSample-1));
+      [sTags.MaxSampleValue] = deal(2.^(TIF.BitsPerSample-1) - 1);
+      [sTags.MinSampleValue] = deal(-2.^(TIF.BitsPerSample-1));
    
    case 3
       if (TIF.BitsPerSample(1) == 32 )
-         TIF.classname = 'single';
-         [INFO.MaxSampleValue] = realmax('single');
-         [INFO.MinSampleValue] = -realmax('single');
+         [sTags.MaxSampleValue] = realmax('single');
+         [sTags.MinSampleValue] = -realmax('single');
       else
-         TIF.classname = 'double';
-         [INFO.MaxSampleValue] = realmax('double');
-         [INFO.MinSampleValue] = -realmax('double');
+         [sTags.MaxSampleValue] = realmax('double');
+         [sTags.MinSampleValue] = -realmax('double');
       end
       
    otherwise
@@ -297,27 +304,27 @@ end
 
    function consolidate_strips(BytesPerPlane)
       
-      for (nFrame = 1:numel(HEADER))
+      for (nFrame = 1:numel(sTags))
          
          %Try to consolidate the strips into a single one to speed-up reading:
-         nBytes = HEADER(nFrame).StripByteCounts(1);
+         nBytes = sTags(nFrame).StripByteCounts(1);
          
          if nBytes < BytesPerPlane
             
             idx = 1;
             % accumulate continguous strips that contribute to the plane
-            while HEADER(nFrame).StripOffsets(1) + nBytes == HEADER(nFrame).StripOffsets(idx+1)
+            while sTags(nFrame).StripOffsets(1) + nBytes == sTags(nFrame).StripOffsets(idx+1)
                idx = idx + 1;
-               nBytes = nBytes + HEADER(nFrame).StripByteCounts(idx);
+               nBytes = nBytes + sTags(nFrame).StripByteCounts(idx);
                if ( nBytes >= BytesPerPlane ); break; end
             end
             
             %Consolidate the Strips
             if ( nBytes <= BytesPerPlane(1) ) && ( idx > 1 )
                %fprintf('Consolidating %i stripes out of %i', ConsolidateCnt, TIF.StripNumber);
-               HEADER(nFrame).StripByteCounts = [nBytes; HEADER(nFrame).StripByteCounts(idx+1:HEADER(nFrame).StripNumber ) ];
-               HEADER(nFrame).StripOffsets = HEADER(nFrame).StripOffsets( [1 , idx+1:HEADER(nFrame).StripNumber] );
-               HEADER(nFrame).StripNumber  = 1 + HEADER(nFrame).StripNumber - idx;
+               sTags(nFrame).StripByteCounts = [nBytes; sTags(nFrame).StripByteCounts(idx+1:sTags(nFrame).StripNumber ) ];
+               sTags(nFrame).StripOffsets = sTags(nFrame).StripOffsets( [1 , idx+1:sTags(nFrame).StripNumber] );
+               sTags(nFrame).StripNumber  = 1 + sTags(nFrame).StripNumber - idx;
             end
          end
       end

@@ -231,17 +231,15 @@ classdef TIFFStack < handle
          oStack.strFilename = strFilename;
          
          % - Get image information
-%          try
+         try
             % - Read and store image information (using tiffread for speed and compatibility)
             [oStack.TIF, oStack.HEADER, sInfo] = tiffread31_header(strFilename);
-            fclose(oStack.TIF.file);
-
-            % - Read and save image information (using imfinfo for BigTIFF compatibility)
-%             sInfo = imfinfo(strFilename);
-%             oStack.sImageInfo = sInfo;
-
+            
             % - Detect a ImageJ fake BigTIFF stack
-            [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(sInfo);
+            [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(tiffread31_readtags(oStack.TIF, oStack.HEADER, 1), numel(oStack.HEADER));
+            
+            % - Close temporary file handle
+            fclose(oStack.TIF.file);
             
             % - Handle ImageJ big stacks with MappedTensor
             if (bIsImageJBigStack)
@@ -478,12 +476,12 @@ classdef TIFFStack < handle
             % - Record image information
             oStack.sImageInfo = sInfo;
             
-%          catch mErr
-%             base_ME = MException('TIFFStack:InvalidFile', ...
-%                   '*** TIFFStack: Could not open file [%s].', strFilename);
-%             new_ME = addCause(base_ME, mErr);
-%             throw(new_ME);
-%          end
+         catch mErr
+            base_ME = MException('TIFFStack:InvalidFile', ...
+                  '*** TIFFStack: Could not open file [%s].', strFilename);
+            new_ME = addCause(base_ME, mErr);
+            throw(new_ME);
+         end
       end
       
       % delete - DESTRUCTOR
@@ -722,6 +720,27 @@ classdef TIFFStack < handle
 
       function sImageInfo = getImageInfo(oStack)
          sImageInfo = oStack.sImageInfo;
+      end
+      
+      function vsTags = getImageTags(oStack, vnFrames)
+         % getImageTags - METHOD Read TIFF tags for individual frames
+         %
+         % Usage: vsTags = getImageTags(oStack, vnFrames)
+         %
+         % 'oStack' is a TIFFStack object. 'vnFrames' is a vector of frame
+         % indices into the stack.
+         %
+         % 'vsTags' will be a struct array, with each element of the array
+         % containing all tags for the corresponding frame index in
+         % 'vnFrames'.
+         
+         if (nargin < 2)
+            help TIFFStack/getImageTags;
+            error('TIFFStack:Usage', 'TIFFStack/getImageTags: ''vnFrames'' is a required argument.');
+         end
+         
+         % - Extract tags for these frames
+         vsTags = tiffread31_readtags(oStack.TIF, oStack.HEADER, vnFrames);
       end
       
       function bInvert = getInvert(oStack)
@@ -1770,7 +1789,7 @@ end
 
 %% -- ImageJ helper functions
 
-function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFrameDims] = IsImageJBigStack(sInfo)
+function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFrameDims] = IsImageJBigStack(sInfo, nAparrentSize)
 
    % - Set up default return arguments
    bIsImageJBigStack = false;
@@ -1794,7 +1813,7 @@ function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFram
       nNumImages = sscanf(strImageDesc(strfind(strImageDesc, 'images='):end), 'images=%d');
       
       % - Does ImageJ report a greater number of images than sInfo?
-      if (~isempty(nNumImages) && (numel(sInfo) ~= nNumImages))
+      if (~isempty(nNumImages) && (nAparrentSize ~= nNumImages))
          bIsImageJBigStack = true;
       end
       
