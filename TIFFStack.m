@@ -161,7 +161,8 @@ classdef TIFFStack < handle
       bForceTiffread       % - Force the use of tiffread, rather than trying to use TiffLib
       vnDataSize;          % - Cached size of the TIFF stack
       vnApparentSize;      % - Apparent size of the TIFF stack
-      TIF;                 % \_ Cached header info for tiffread31 speedups
+      TIF;                 % \
+      TIF_tr31;            % |- Cached header info for tiffread31 speedups
       HEADER;              % /
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
       bMTStack;            % - Flag indicating MappedTensor is being used
@@ -234,12 +235,13 @@ classdef TIFFStack < handle
          try
             % - Read and store image information (using tiffread for speed and compatibility)
             [oStack.TIF, oStack.HEADER, sInfo] = tiffread31_header(strFilename);
+            oStack.TIF_tr31 = oStack.TIF;
             
             % - Detect a ImageJ fake BigTIFF stack
-            [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(tiffread31_readtags(oStack.TIF, oStack.HEADER, 1), numel(oStack.HEADER));
+            [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(tiffread31_readtags(oStack.TIF_tr31, oStack.HEADER, 1), numel(oStack.HEADER));
             
             % - Close temporary file handle
-            fclose(oStack.TIF.file);
+            fclose(oStack.TIF_tr31.file);
             
             % - Handle ImageJ big stacks with MappedTensor
             if (bIsImageJBigStack)
@@ -740,7 +742,7 @@ classdef TIFFStack < handle
          end
          
          % - Extract tags for these frames
-         vsTags = tiffread31_readtags(oStack.TIF, oStack.HEADER, vnFrames);
+         vsTags = tiffread31_readtags(oStack.TIF_tr31, oStack.HEADER, vnFrames);
       end
       
       function bInvert = getInvert(oStack)
