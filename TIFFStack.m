@@ -240,9 +240,6 @@ classdef TIFFStack < handle
             % - Detect a ImageJ fake BigTIFF stack
             [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedIJFrameDims] = IsImageJBigStack(tiffread31_readtags(oStack.TIF_tr31, oStack.HEADER, 1), numel(oStack.HEADER));
             
-            % - Close temporary file handle
-            fclose(oStack.TIF_tr31.file);
-            
             % - Handle ImageJ big stacks with MappedTensor
             if (bIsImageJBigStack)
                [oStack.TIF, oStack.bMTStack, oStack.strDataClass] = OpenImageJBigStack(oStack, vnStackDims);
@@ -493,12 +490,11 @@ classdef TIFFStack < handle
             if (~isempty(oStack.TIF))
                tifflib('close', oStack.TIF);
             end
-
-         else
-            % - Close the TIFF file, if opened by tiffread31_header
-            if (isfield(oStack.TIF, 'file'))
-               fclose(oStack.TIF.file);
-            end
+         end
+         
+         % - Close the TIFF file, if opened by tiffread31_header
+         if (isfield(oStack.TIF_tr31, 'file') && ~isempty(fopen(oStack.TIF_tr31.file)))
+            fclose(oStack.TIF_tr31.file);
          end
       end
 
