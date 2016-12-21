@@ -138,6 +138,9 @@ matlabTypeMap = { ...
 
 %% ---- read the image file directories (IFDs)
 
+% subset of tags that are effectively parsed
+parsed_tags = [256, 257, 258, 259, 262, 273, 277, 278, 279, 284, 317, 320, 339];
+
 ifd_pos   = fread(TIF.file, 1, TIF.strIFDClassSize, TIF.ByteOrder);
 img_indx  = 0;
 
@@ -344,8 +347,16 @@ end
       buffer = fread(TIF.file, 2, 'uint16', TIF.ByteOrder);
       entry_tag = buffer(1);
       tiffType = buffer(2);
+
+      % skip tags that are not used afterwards
+      if ~any(entry_tag == parsed_tags)  % faster than ismember for this case
+          entry_val = [];
+          entry_cnt = [];
+          return;
+      end
+
       entry_cnt = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
-      
+
       try
          nbBytes = nbBytesMap(tiffType);
          matlabType = matlabTypeMap{tiffType};
@@ -363,13 +374,8 @@ end
          file_seek(fpos);
       end
 
-      if entry_tag == 33629   % metamorph stack plane specifications
-         entry_val = fread(TIF.file, 6 * entry_cnt, matlabType, TIF.ByteOrder);
-
-      elseif entry_tag == 34412  % TIF_CZ_LSMINFO
-         entry_val = readLSMinfo();
-
-      elseif tiffType == 5  % TIFF 'rational' type
+      % TIFF 'rational' type
+      if tiffType == 5
          val = fread(TIF.file, 2 * entry_cnt, matlabType, TIF.ByteOrder);
          entry_val = val(1:2:end) ./ val(2:2:end);
 
@@ -377,73 +383,6 @@ end
          entry_val = fread(TIF.file, entry_cnt, matlabType, TIF.ByteOrder)';
       end
 
-   end
-
-%%  ---- partial-parse of LSM info
-
-   function R = readLSMinfo()
-      
-      % Read part of the LSM info table version 2
-      % this provides only very partial information, since the offset indicate that
-      % additional data is stored in the file
-      
-      R.MagicNumber          = sprintf('0x%09X',fread(TIF.file, 1, 'uint32', TIF.ByteOrder));
-      S.StructureSize        = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.DimensionX           = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.DimensionY           = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.DimensionZ           = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.DimensionChannels    = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.DimensionTime        = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.IntensityDataType    = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.ThumbnailX           = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.ThumbnailY           = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.VoxelSizeX           = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      R.VoxelSizeY           = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      R.VoxelSizeZ           = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      R.OriginX              = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      R.OriginY              = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      R.OriginZ              = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      R.ScanType             = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
-      R.SpectralScan         = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
-      R.DataType             = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetVectorOverlay  = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetInputLut       = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetOutputLut      = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetChannelColors  = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      R.TimeInterval         = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-      S.OffsetChannelDataTypes = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetScanInformatio = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetKsData         = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetTimeStamps     = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetEventList      = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetRoi            = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetBleachRoi      = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      S.OffsetNextRecording  = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
-      
-      % There is more information stored in this table, which is skipped here
-      
-      % read real acquisition times:
-      if ( S.OffsetTimeStamps > 0 )
-         
-         status = fseek(TIF.file, S.OffsetTimeStamps, -1);
-         if status == -1
-            warning('tiffread:TimeStamps', 'Could not locate LSM TimeStamps');
-            return;
-         end
-         
-         StructureSize          = fread(TIF.file, 1, 'int32', TIF.ByteOrder); %#ok<NASGU>
-         NumberTimeStamps       = fread(TIF.file, 1, 'int32', TIF.ByteOrder);
-         for i=1:NumberTimeStamps
-            R.TimeStamp(i)      = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
-         end
-         
-         % calculate elapsed time from first acquisition:
-         R.TimeOffset = R.TimeStamp - R.TimeStamp(1);
-         
-      end
-      
-      % anything else assigned to S is discarded
-      
    end
 
 end
