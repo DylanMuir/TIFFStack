@@ -1,6 +1,6 @@
 function [TIF, HEADER, INFO] = tiffread31_header(file_name)
 
-%% set defaults values:
+%% ---- set defaults values
 
 opt.ReadUnknownTags = true;
 opt.ConsolidateStrips = true;
@@ -19,7 +19,7 @@ HEADER.SamplesPerPixel = 1;
 INFO.SamplesPerPixel = 1;
 TIF.PlanarConfiguration = 1;
 
-% obtain the full file path:
+% obtain the full file path
 [status, file_attrib] = fileattrib(file_name);
 
 if status == 0
@@ -36,7 +36,6 @@ TIF.file = fopen(file_name,'r','l');
 TIF.image_name = [name, ext];
 TIF.file_name = file_name; %#ok<*AGROW>
 
-
 %% ---- read byte order: II = little endian, MM = big endian
 
 bos = fread(TIF.file, 2, '*char');
@@ -50,7 +49,6 @@ else
    error('This is not a TIFF file (no MM or II).');
 end
 
-
 %% ---- read in a number which identifies TIFF format
 
 TIF.tiff_id = fread(TIF.file,1,'uint16', TIF.ByteOrder);
@@ -59,7 +57,7 @@ if (TIF.tiff_id ~= 42) && (TIF.tiff_id ~= 43)
    error('This is not a TIFF file (missing 42 or 43).');
 end
 
-% - By default, read 4-byte pointers
+% by default, read 4-byte pointers
 TIF.strIFDNumEntriesSize = 'uint16';
 TIF.strIFDClassSize = 'uint32';
 TIF.nIFDTagBytes = 12;
@@ -67,18 +65,18 @@ TIF.nIFDClassBytes = 2;
 TIF.strTagSizeClass = 'uint32';
 TIF.nInlineBytes = 4;
 
-% - Handle a BigTIFF file
+% handle a BigTIFF file
 if (TIF.tiff_id == 43)
    TIF.offset_size = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
    test_val = fread(TIF.file, 1, 'uint16', TIF.ByteOrder);
    
-   % - Test check value
+   % test check value
    if (test_val ~= 0)
       error('This is not a valid BigTIFF file (invalid test value).');
    end
    
-   % - Get IFD pointer data class
-   switch (TIF.offset_size)
+   % get IFD pointer data class
+   switch TIF.offset_size
       case 8
          TIF.strIFDNumEntriesSize = 'uint64';
          TIF.strIFDClassSize = 'uint64';
@@ -98,7 +96,7 @@ if (TIF.tiff_id == 43)
    TIF.nInlineBytes = 8;
 end
 
-%% Maps to accelerate types conversions in readIFDentry function
+%% ---- maps to accelerate types conversions in readIFDentry function
 
 nbBytesMap = [ ...
    1, ... byte
@@ -144,101 +142,120 @@ ifd_pos   = fread(TIF.file, 1, TIF.strIFDClassSize, TIF.ByteOrder);
 img_indx  = 0;
 
 while ifd_pos ~= 0
-   
+
    img_indx = img_indx + 1;
-   
+
    HEADER(img_indx).index = img_indx;
    HEADER(img_indx).ifd_pos = ifd_pos;
-   
+
    % move in the file to the next IFD
    file_seek(ifd_pos);
-   
-   %read in the number of IFD entries
-   num_entries = fread(TIF.file,1,TIF.strIFDNumEntriesSize, TIF.ByteOrder);
-   %fprintf('num_entries = %i\n', num_entries);
-   
-   % store current position:
-   entry_pos = ifd_pos+TIF.nIFDClassBytes;
-   
-   % read the next IFD address:
-   file_seek(ifd_pos+TIF.nIFDTagBytes*num_entries+TIF.nIFDClassBytes);
+
+   % read in the number of IFD entries
+   num_entries = fread(TIF.file,1, TIF.strIFDNumEntriesSize, TIF.ByteOrder);
+
+   % store current position
+   entry_pos = ifd_pos + TIF.nIFDClassBytes;
+
+   % read the next IFD address
+   file_seek(ifd_pos + TIF.nIFDTagBytes * num_entries + TIF.nIFDClassBytes);
    ifd_pos = fread(TIF.file, 1, TIF.strIFDClassSize, TIF.ByteOrder);
-   
-   %fprintf('reading IFD %i at position %i\n', img_indx, ifd_pos);
-   
+
    % read all the IFD entries
    for inx = 1:num_entries
-      
+
       % move to next IFD entry in the file
-      file_seek(entry_pos+TIF.nIFDTagBytes*(inx-1));
-      
+      file_seek(entry_pos + TIF.nIFDTagBytes * (inx - 1));
+
       % read entry
       [entry_tag, entry_val, entry_cnt] = readIFDentry(TIF.strTagSizeClass, TIF.nInlineBytes);
-      
-      %fprintf('found entry with tag %i\n', entry_tag);
-      
-      
+
       % not all valid tiff tags have been included, but tags can easily be added to this code
       % See the official list of tags:
       % http://partners.adobe.com/asn/developer/pdfs/tn/TIFF6.pdf
       switch entry_tag
-         case 256         % image width = number of column
+
+         % image width = number of column
+         case 256
             HEADER(img_indx).width = entry_val;
             INFO(img_indx).Width = entry_val;
-         case 257         % image height = number of row
+
+         % image height = number of row
+         case 257
             HEADER(img_indx).height = entry_val;
             TIF.ImageLength = entry_val;
             INFO(img_indx).Height = entry_val;
+
+         % bits per sample
          case 258
             TIF.BitsPerSample = entry_val;
             TIF.BytesPerSample = TIF.BitsPerSample / 8;
             HEADER(img_indx).bits = TIF.BitsPerSample(1);
             INFO(img_indx).BitsPerSample = entry_val;
-            %fprintf('BitsPerSample %i %i %i\n', entry_val);
-         case 259         % compression
-            if ( entry_val ~= 1 )
-               error('TIFFStack:Compression', ['Compression format ', num2str(entry_val),' not supported.']);
+         
+         % compression
+         case 259         
+            if entry_val ~= 1
+               error('TIFFStack:Compression', ...
+                   ['Compression format ', num2str(entry_val),' not supported.']);
             end
-         case 262         % photometric interpretation
+
+         % photometric interpretation
+         case 262         
             TIF.PhotometricInterpretation = entry_val;
-            if ( TIF.PhotometricInterpretation == 3 )
+            if TIF.PhotometricInterpretation == 3
                warning('tiffread:LookUp', 'Ignoring TIFF look-up table.');
-               %                fprintf(2, 'Ignoring TIFF look-up table in %s\n', image_name);
             end
-         case 273         % strip offset
+
+         % strip offset
+         case 273         
             HEADER(img_indx).StripOffsets = entry_val;
             HEADER(img_indx).StripNumber = entry_cnt;
-            %fprintf('StripNumber = %i, size(StripOffsets) = %i %i\n', TIF.StripNumber, size(TIF.StripOffsets));
+
+         % samples per pixel
          case 277
-            TIF.SamplesPerPixel  = entry_val;
+            TIF.SamplesPerPixel = entry_val;
             INFO(img_indx).SamplesPerPixel = entry_val;
-            %fprintf('Color image: sample_per_pixel=%i\n',  TIF.SamplesPerPixel);
+
+         % rows per strip
          case 278
             INFO(img_indx).RowsPerStrip = entry_val;
-            HEADER(img_indx).RowsPerStrip   = entry_val;
-         case 279         % strip byte counts - number of bytes in each strip after any compressio
+            HEADER(img_indx).RowsPerStrip = entry_val;
+
+         % strip byte counts - number of bytes in each strip after any compression
+         case 279         
             HEADER(img_indx).StripByteCounts= entry_val;
-         case 284         % planar configuration describe the order of RGB
+
+         % planar configuration describe the order of RGB
+         case 284
             TIF.PlanarConfiguration = entry_val;
-         case 317        %predictor for compression
-            if (entry_val ~= 1); error('Unsuported predictor value.'); end
-         case 320         % color map
-            HEADER(img_indx).cmap           = entry_val;
-            HEADER(img_indx).colors         = entry_cnt/3;
+
+         % predictor for compression
+         case 317
+            if entry_val ~= 1
+                error('Unsuported predictor value.')
+            end
+
+         % color map
+         case 320
+            HEADER(img_indx).cmap = entry_val;
+            HEADER(img_indx).colors = entry_cnt / 3;
+
+         % sample format
          case 339
-            TIF.SampleFormat   = entry_val;
+            TIF.SampleFormat = entry_val;
+
       end
 
-      % - Calculate the bounding box  if we have the required information
+      % calculate the bounding box  if we have the required information
       if isfield(HEADER, 'ModelPixelScaleTag') && isfield(HEADER, 'ModelTiePointTag') && isfield(HEADER, 'height')&& isfield(HEADER, 'width'),
-         HEADER(img_indx).North=HEADER(img_indx).ModelTiePointTag(5)-HEADER(img_indx).ModelPixelScaleTag(2)*HEADER(img_indx).ModelTiePointTag(2);
-         HEADER(img_indx).South=HEADER(img_indx).North-HEADER(img_indx).height*HEADER(img_indx).ModelPixelScaleTag(2);
-         HEADER(img_indx).West=HEADER(img_indx).ModelTiePointTag(4)+HEADER(img_indx).ModelPixelScaleTag(1)*HEADER(img_indx).ModelTiePointTag(1);
-         HEADER(img_indx).East=HEADER(img_indx).West+HEADER(img_indx).width*HEADER(img_indx).ModelPixelScaleTag(1);
+         HEADER(img_indx).North = HEADER(img_indx).ModelTiePointTag(5)-HEADER(img_indx).ModelPixelScaleTag(2)*HEADER(img_indx).ModelTiePointTag(2);
+         HEADER(img_indx).South = HEADER(img_indx).North-HEADER(img_indx).height*HEADER(img_indx).ModelPixelScaleTag(2);
+         HEADER(img_indx).West = HEADER(img_indx).ModelTiePointTag(4)+HEADER(img_indx).ModelPixelScaleTag(1)*HEADER(img_indx).ModelTiePointTag(1);
+         HEADER(img_indx).East = HEADER(img_indx).West+HEADER(img_indx).width*HEADER(img_indx).ModelPixelScaleTag(1);
       end
    end
-   
-   
+
    % total number of bytes per image:
    if TIF.PlanarConfiguration == 1
       TIF.BytesPerPlane = TIF.SamplesPerPixel * HEADER(img_indx).width * HEADER(img_indx).height * TIF.BytesPerSample;
@@ -253,7 +270,7 @@ if isfield(TIF, 'SampleFormat')
    SampleFormat = TIF.SampleFormat(1);
 end
 
-switch( SampleFormat )
+switch SampleFormat
    case 1
       TIF.classname = sprintf('uint%i', TIF.BitsPerSample(1));
       [INFO.MaxSampleValue] = deal(2.^TIF.BitsPerSample - 1);
@@ -280,13 +297,11 @@ switch( SampleFormat )
 end
 
 % - Try to consolidate the TIFF strips if possible
-
 if opt.ConsolidateStrips
    consolidate_strips(TIF.BytesPerPlane);
 end
 
-
-%% Sub Functions
+%% ---- sub Functions
 
    function file_seek(fpos)
       status = fseek(TIF.file, fpos, -1);
@@ -296,14 +311,14 @@ end
    end
 
    function consolidate_strips(BytesPerPlane)
-      
-      for (nFrame = 1:numel(HEADER))
-         
-         %Try to consolidate the strips into a single one to speed-up reading:
+
+      for nFrame = 1:numel(HEADER)
+
+         % try to consolidate the strips into a single one to speed-up reading:
          nBytes = HEADER(nFrame).StripByteCounts(1);
-         
+
          if nBytes < BytesPerPlane
-            
+
             idx = 1;
             % accumulate continguous strips that contribute to the plane
             while HEADER(nFrame).StripOffsets(1) + nBytes == HEADER(nFrame).StripOffsets(idx+1)
@@ -311,23 +326,21 @@ end
                nBytes = nBytes + HEADER(nFrame).StripByteCounts(idx);
                if ( nBytes >= BytesPerPlane ); break; end
             end
-            
-            %Consolidate the Strips
-            if ( nBytes <= BytesPerPlane(1) ) && ( idx > 1 )
-               %fprintf('Consolidating %i stripes out of %i', ConsolidateCnt, TIF.StripNumber);
-               HEADER(nFrame).StripByteCounts = [nBytes; HEADER(nFrame).StripByteCounts(idx+1:HEADER(nFrame).StripNumber ) ];
-               HEADER(nFrame).StripOffsets = HEADER(nFrame).StripOffsets( [1 , idx+1:HEADER(nFrame).StripNumber] );
-               HEADER(nFrame).StripNumber  = 1 + HEADER(nFrame).StripNumber - idx;
+
+            % consolidate the stripes
+            if (nBytes <= BytesPerPlane(1)) && (idx > 1)
+               HEADER(nFrame).StripByteCounts = [nBytes; HEADER(nFrame).StripByteCounts(idx+1:HEADER(nFrame).StripNumber)];
+               HEADER(nFrame).StripOffsets = HEADER(nFrame).StripOffsets([1 , idx+1:HEADER(nFrame).StripNumber]);
+               HEADER(nFrame).StripNumber = 1 + HEADER(nFrame).StripNumber - idx;
             end
          end
       end
    end
 
-
-%% ==================sub-functions that reads an IFD entry:===================
+%%  ---- sub-function that reads an IFD entry
 
    function [entry_tag, entry_val, entry_cnt] = readIFDentry(strTagSizeClass, nInlineBytes)
-      
+
       buffer = fread(TIF.file, 2, 'uint16', TIF.ByteOrder);
       entry_tag = buffer(1);
       tiffType = buffer(2);
@@ -343,31 +356,30 @@ end
             rethrow(ME);
          end
       end
-      
+
       if nbBytes * entry_cnt > nInlineBytes
          % next field contains an offset
          fpos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
          file_seek(fpos);
       end
-      
+
       if entry_tag == 33629   % metamorph stack plane specifications
          entry_val = fread(TIF.file, 6 * entry_cnt, matlabType, TIF.ByteOrder);
-         
+
       elseif entry_tag == 34412  % TIF_CZ_LSMINFO
          entry_val = readLSMinfo();
-         
+
       elseif tiffType == 5  % TIFF 'rational' type
          val = fread(TIF.file, 2 * entry_cnt, matlabType, TIF.ByteOrder);
          entry_val = val(1:2:end) ./ val(2:2:end);
-         
+
       else
          entry_val = fread(TIF.file, entry_cnt, matlabType, TIF.ByteOrder)';
       end
-      
+
    end
 
-
-%% ==============partial-parse of LSM info:
+%%  ---- partial-parse of LSM info
 
    function R = readLSMinfo()
       
@@ -413,7 +425,7 @@ end
       % read real acquisition times:
       if ( S.OffsetTimeStamps > 0 )
          
-         status =  fseek(TIF.file, S.OffsetTimeStamps, -1);
+         status = fseek(TIF.file, S.OffsetTimeStamps, -1);
          if status == -1
             warning('tiffread:TimeStamps', 'Could not locate LSM TimeStamps');
             return;
@@ -425,7 +437,7 @@ end
             R.TimeStamp(i)      = fread(TIF.file, 1, 'float64', TIF.ByteOrder);
          end
          
-         %calculate elapsed time from first acquisition:
+         % calculate elapsed time from first acquisition:
          R.TimeOffset = R.TimeStamp - R.TimeStamp(1);
          
       end
