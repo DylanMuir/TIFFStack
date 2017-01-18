@@ -148,60 +148,60 @@ for (img_indx = 1:numel(vnFrame))
             end
          case 4869       %ANDOR tag: temperature in Celsius when stabilized
             if ~(entry_val == -999)
-               sTags(img_indx).ANDOR.temperature = entry_val;
+               sTags(img_indx).ANDOR(1).temperature = entry_val;
             end
          case 4876       %exposure time in seconds
-            sTags(img_indx).ANDOR.exposureTime   = entry_val;
+            sTags(img_indx).ANDOR(1).exposureTime   = entry_val;
          case 4878
-            sTags(img_indx).ANDOR.kineticCycleTime = entry_val;
+            sTags(img_indx).ANDOR(1).kineticCycleTime = entry_val;
          case 4879       %number of accumulations
-            sTags(img_indx).ANDOR.nAccumulations = entry_val;
+            sTags(img_indx).ANDOR(1).nAccumulations = entry_val;
          case 4881
-            sTags(img_indx).ANDOR.acquisitionCycleTime = entry_val;
+            sTags(img_indx).ANDOR(1).acquisitionCycleTime = entry_val;
          case 4882       %Readout time in seconds, 1/readoutrate
-            sTags(img_indx).ANDOR.readoutTime = entry_val;
+            sTags(img_indx).ANDOR(1).readoutTime = entry_val;
          case 4884
             if (entry_val == 9)
-               sTags(img_indx).ANDOR.isPhotonCounting = 1;
+               sTags(img_indx).ANDOR(1).isPhotonCounting = 1;
             else
-               sTags(img_indx).ANDOR.isPhotonCounting = 0;
+               sTags(img_indx).ANDOR(1).isPhotonCounting = 0;
             end
          case 4885         %EM DAC level
-            sTags(img_indx).ANDOR.emDacLevel = entry_val;
+            sTags(img_indx).ANDOR(1).emDacLevel = entry_val;
          case 4890
-            sTags(img_indx).ANDOR.nFrames = entry_val;
+            sTags(img_indx).ANDOR(1).nFrames = entry_val;
          case 4896
-            sTags(img_indx).ANDOR.isFlippedHorizontally = entry_val;
+            sTags(img_indx).ANDOR(1).isFlippedHorizontally = entry_val;
          case 4897
-            sTags(img_indx).ANDOR.isFlippedVertically = entry_val;
+            sTags(img_indx).ANDOR(1).isFlippedVertically = entry_val;
          case 4898
-            sTags(img_indx).ANDOR.isRotatedClockwise = entry_val;
+            sTags(img_indx).ANDOR(1).isRotatedClockwise = entry_val;
          case 4899
-            sTags(img_indx).ANDOR.isRotatedAnticlockwise = entry_val;
+            sTags(img_indx).ANDOR(1).isRotatedAnticlockwise = entry_val;
          case 4904
-            sTags(img_indx).ANDOR.verticalClockVoltageAmplitude = entry_val;
+            sTags(img_indx).ANDOR(1).verticalClockVoltageAmplitude = entry_val;
          case 4905
-            sTags(img_indx).ANDOR.verticalShiftSpeed = entry_val;
+            sTags(img_indx).ANDOR(1).verticalShiftSpeed = entry_val;
          case 4907
-            sTags(img_indx).ANDOR.preAmpSetting = entry_val;
+            sTags(img_indx).ANDOR(1).preAmpSetting = entry_val;
          case 4908         %Camera Serial Number
-            sTags(img_indx).ANDOR.serialNumber = entry_val;
+            sTags(img_indx).ANDOR(1).serialNumber = entry_val;
          case 4911       %Actual camera temperature when not equal to -999
             if ~(entry_val == -999)
-               sTags(img_indx).ANDOR.unstabilizedTemperature = entry_val;
+               sTags(img_indx).ANDOR(1).unstabilizedTemperature = entry_val;
             end
          case 4912
-            sTags(img_indx).ANDOR.isBaselineClamped = entry_val;
+            sTags(img_indx).ANDOR(1).isBaselineClamped = entry_val;
          case 4913
-            sTags(img_indx).ANDOR.nPrescans = entry_val;
+            sTags(img_indx).ANDOR(1).nPrescans = entry_val;
          case 4914
-            sTags(img_indx).ANDOR.model = entry_val;
+            sTags(img_indx).ANDOR(1).model = entry_val;
          case 4915
-            sTags(img_indx).ANDOR.chipXSize = entry_val;
+            sTags(img_indx).ANDOR(1).chipXSize = entry_val;
          case 4916
-            sTags(img_indx).ANDOR.chipYSize  = entry_val;
+            sTags(img_indx).ANDOR(1).chipYSize  = entry_val;
          case 4944
-            sTags(img_indx).ANDOR.baselineOffset = entry_val;
+            sTags(img_indx).ANDOR(1).baselineOffset = entry_val;
             
          case 33550       % GeoTIFF
             sTags(img_indx).ModelPixelScaleTag = entry_val;
