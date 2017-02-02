@@ -353,7 +353,7 @@ end
       
       if nbBytes * entry_cnt > nInlineBytes
          % next field contains an offset
-         fpos = fread(TIF.file, 1, 'uint32', TIF.ByteOrder);
+         fpos = fread(TIF.file, 1, strTagSizeClass, TIF.ByteOrder);
          file_seek(fpos);
       end
       
