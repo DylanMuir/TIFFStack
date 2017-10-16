@@ -146,6 +146,8 @@
 % Author: Dylan Muir <muir@hifo.uzh.ch>
 % Created: 28th June, 2011
 
+%% Class definition
+
 classdef TIFFStack < handle
    properties
       bInvert;             % - A boolean flag that determines whether or not the image data will be inverted
