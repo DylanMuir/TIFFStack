@@ -1,10 +1,23 @@
 function [TIF, HEADER, INFO] = tiffread31_header(file_name)
 
+DEF_nPreallocateBlock = 1000;
+DEF_HEADER = struct( 'SamplesPerPixel', [], 'index', [], 'ifd_pos', [], ...
+                     'width', [], 'height', [], 'bits', [], 'StripOffsets', [], ...
+                     'StripNumber', [], 'RowsPerStrip', [], 'StripByteCounts', [], ...
+                     'cmap', [], 'colors', []);
+DEF_INFO = struct('SamplesPerPixel', [], 'ByteOrder', [], 'Width', [], ...
+                  'Height', [], 'BitsPerSample', [], ...
+                  'RowsPerStrip', [], 'PlanarConfiguration', [], ...
+                  'MaxSampleValue', [], 'MinSampleValue', []);
+                     
+
 %% --- Initialise variables and open TIFF file
 
 TIF = struct('ByteOrder', 'ieee-le');  % byte order string
 TIF.SamplesPerPixel = 1;
+HEADER = DEF_HEADER;
 HEADER.SamplesPerPixel = 1;
+INFO = DEF_INFO;
 INFO.SamplesPerPixel = 1;
 TIF.PlanarConfiguration = 1;
 
@@ -139,13 +152,22 @@ parsed_tags = [256, 257, 258, 259, 262, 273, 277, 278, 279, 284, 317, 320, 339];
 ifd_pos = fread(TIF.file, 1, TIF.strIFDClassSize, TIF.ByteOrder);
 img_indx = 0;
 
-% - Suppress warnings about growing variables
-%#ok<*AGROW>
+% - Attempt to preallocate
+nPreallocateBlock = DEF_nPreallocateBlock;
+HEADER(nPreallocateBlock) = DEF_HEADER;
+INFO(nPreallocateBlock) = DEF_INFO;
 
 % - Loop until the last IFD
 while (ifd_pos ~= 0)
 
    img_indx = img_indx + 1;
+   
+   % - Extend arrays
+   if (img_indx > nPreallocateBlock)
+      nPreallocateBlock = nPreallocateBlock + DEF_nPreallocateBlock;
+      HEADER(nPreallocateBlock) = DEF_HEADER;
+      INFO(nPreallocateBlock) = DEF_INFO;
+   end
 
    % - Store the IFD (frame) index and the IFD file offset
    HEADER(img_indx).index = img_indx; 
@@ -293,6 +315,10 @@ switch (SampleFormat)
       % - Unknown / unsupported storage format
       error('TIFFStack:Format', '*** TIFFStack: Error: Unsuported TIFF sample format [%i].', SampleFormat);
 end
+
+% - Trim pre-allocated blocks
+HEADER(img_indx+1:end) = [];
+INFO(img_indx+1:end) = [];
 
 % - Try to consolidate the TIFF strips if possible, to minimise disk reads
 consolidate_strips(TIF.BytesPerPlane);

@@ -1758,6 +1758,14 @@ end
 %% -- MEX-handling functions
 
 function [hRepSumFunc] = GetMexFunctionHandles
+   % - Try to use cache for function handle
+   persistent GMFH_hRepSumFunc;
+   
+   if ~isempty(GMFH_hRepSumFunc)
+      hRepSumFunc = GMFH_hRepSumFunc;
+      return;
+   end
+
    % - Does the compiled MEX function exist?
    if (exist('mapped_tensor_repsum') ~= 3) %#ok<EXIST>
       % - Move to the MappedTensor private directory
@@ -1785,6 +1793,9 @@ function [hRepSumFunc] = GetMexFunctionHandles
       
       hRepSumFunc = @mapped_tensor_repsum_nomex;
    end
+   
+   % - Record function handle in the cache
+   GMFH_hRepSumFunc = hRepSumFunc;
 end
 
 %% -- ImageJ helper functions
