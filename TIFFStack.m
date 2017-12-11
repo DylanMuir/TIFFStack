@@ -1800,7 +1800,7 @@ end
 
 %% -- ImageJ helper functions
 
-function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFrameDims] = IsImageJBigStack(sInfo, nAparrentSize)
+function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFrameDims] = IsImageJBigStack(sInfo, nApparentSize)
 
    % - Set up default return arguments
    bIsImageJBigStack = false;
@@ -1824,7 +1824,7 @@ function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFram
       nNumImages = sscanf(strImageDesc(strfind(strImageDesc, 'images='):end), 'images=%d');
       
       % - Does ImageJ report a greater number of images than sInfo?
-      if (~isempty(nNumImages) && (nAparrentSize ~= nNumImages))
+      if (~isempty(nNumImages) && (nApparentSize ~= nNumImages))
          bIsImageJBigStack = true;
       end
       
@@ -1849,6 +1849,14 @@ function [bIsImageJBigStack, bIsImageJHyperStack, vnStackDims, vnInterleavedFram
          
          if (isempty(nNumFrames))
             nNumFrames = 1;
+         end
+         
+         % - Check total stack size
+         if (nNumFrames*nNumSlices*nNumChannels ~= nApparentSize)
+            warning('TIFFStack:ImageJStackSize', ...
+               'The reported size of this stack does not match the number of IFDs.\nI will attempt to continue.');
+            
+            nNumFrames = floor(nApparentSize / nNumSlices / nNumChannels);
          end
          
          % - Deinterleave stack
